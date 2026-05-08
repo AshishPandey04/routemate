@@ -12,7 +12,7 @@ const protectedRoutes = [
   '/track',
 ]
 
-export async function middleware(request) {
+export async function proxy(request) {
   const { pathname } = request.nextUrl
   const isProtected = protectedRoutes.some(route =>
     pathname.startsWith(route)
