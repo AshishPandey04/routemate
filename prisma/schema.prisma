@@ -1,13 +1,332 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../lib/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
+ 
+}
+
+// ─────────────────────────────────────
+// USERS
+// ─────────────────────────────────────
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String   @unique
+  passwordHash String
+  role         Role     @default(RIDER)
+  isVerified   Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  cars            Car[]
+  tripsAsDriver   Trip[]        @relation("DriverTrips")
+  bookings        Booking[]
+  sentMessages    Message[]
+  ratingsGiven    Rating[]      @relation("RatingsGiven")
+  ratingsReceived Rating[]      @relation("RatingsReceived")
+  returnAlerts    ReturnAlert[]
+  routeAlerts     RouteAlert[]
+}
+
+enum Role {
+  RIDER
+  DRIVER
+  BOTH
+}
+
+// ─────────────────────────────────────
+// CARS
+// ─────────────────────────────────────
+model Car {
+  id          String   @id @default(uuid())
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id])
+  make        String
+  model       String
+  year        Int
+  plateNumber String   @unique
+  totalSeats  Int
+  isAC        Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  trips Trip[]
+
+  @@index([ownerId])
+}
+
+// ─────────────────────────────────────
+// TRIPS
+// ─────────────────────────────────────
+model Trip {
+  id               String     @id @default(uuid())
+  driverId         String
+  driver           User       @relation("DriverTrips", fields: [driverId], references: [id])
+  carId            String
+  car              Car        @relation(fields: [carId], references: [id])
+
+  originCity       String
+  destinationCity  String
+  originLat        Float
+  originLng        Float
+  destinationLat   Float
+  destinationLng   Float
+
+  departureTime    DateTime
+  estimatedArrival DateTime
+
+  routeCities      String[]
+
+  totalSeats       Int
+  pricePerKm       Float
+  distanceKm       Float
+  encodedPolyline  String
+
+  allowSharing     Boolean    @default(true)
+  status           TripStatus @default(SCHEDULED)
+  cancellationNote String?
+
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  waypoints        Waypoint[]
+  bookings         Booking[]
+  gpsPings         GpsPing[]
+  messages         Message[]
+  returnSlot       ReturnSlot?
+
+  @@index([status])
+  @@index([originCity, destinationCity])
+  @@index([departureTime])
+  @@index([driverId])
+}
+
+enum TripStatus {
+  SCHEDULED
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+}
+
+// ─────────────────────────────────────
+// WAYPOINTS
+// ─────────────────────────────────────
+model Waypoint {
+  id               String    @id @default(uuid())
+  tripId           String
+  trip             Trip      @relation(fields: [tripId], references: [id])
+
+  cityName         String
+  lat              Float
+  lng              Float
+  sequenceIndex    Int
+  estimatedArrival DateTime
+  actualArrival    DateTime?
+
+  @@unique([tripId, sequenceIndex])
+  @@index([tripId, sequenceIndex])
+}
+
+// ─────────────────────────────────────
+// SEAT SEGMENTS
+// ─────────────────────────────────────
+model SeatSegment {
+  id            String  @id @default(uuid())
+  tripId        String
+  bookingId     String  @unique
+  booking       Booking @relation(fields: [bookingId], references: [id])
+  fromIndex     Int
+  toIndex       Int
+  seatsOccupied Int
+
+  @@index([tripId, fromIndex, toIndex])
+}
+
+// ─────────────────────────────────────
+// BOOKINGS
+// ─────────────────────────────────────
+model Booking {
+  id             String        @id @default(uuid())
+  tripId         String
+  trip           Trip          @relation(fields: [tripId], references: [id])
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+
+  boardingCity   String
+  alightingCity  String
+  boardingIndex  Int
+  alightingIndex Int
+  seatsBooked    Int
+
+  totalAmount    Float
+  status         BookingStatus @default(CONFIRMED)
+  isReturnTrip   Boolean       @default(false)
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  payment        Payment?
+  seatSegment    SeatSegment?
+  rating         Rating?
+
+  @@index([userId])
+  @@index([tripId])
+  @@index([status])
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+// ─────────────────────────────────────
+// PAYMENTS
+// ─────────────────────────────────────
+model Payment {
+  id                  String        @id @default(uuid())
+  bookingId           String        @unique
+  booking             Booking       @relation(fields: [bookingId], references: [id])
+
+  razorpayOrderId     String        @unique
+  razorpayPaymentId   String?       @unique
+  razorpaySignature   String?
+
+  amount              Float
+  currency            String        @default("INR")
+  status              PaymentStatus @default(INITIATED)
+
+  refundId            String?
+  refundAmount        Float?
+  refundedAt          DateTime?
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+enum PaymentStatus {
+  INITIATED
+  CAPTURED
+  FAILED
+  REFUNDED
+  PARTIAL_REFUND
+}
+
+// ─────────────────────────────────────
+// RETURN SLOTS
+// ─────────────────────────────────────
+model ReturnSlot {
+  id                  String           @id @default(uuid())
+  tripId              String           @unique
+  trip                Trip             @relation(fields: [tripId], references: [id])
+
+  returnOrigin        String
+  returnDestination   String
+  estimatedReturnDate DateTime
+  status              ReturnSlotStatus @default(OPEN)
+  returnTripId        String?          @unique
+
+  createdAt           DateTime         @default(now())
+
+  returnAlerts        ReturnAlert[]
+
+  @@index([returnOrigin, returnDestination])
+  @@index([status])
+}
+
+enum ReturnSlotStatus {
+  OPEN
+  CONFIRMED
+  CANCELLED
+}
+
+// ─────────────────────────────────────
+// RETURN ALERTS
+// ─────────────────────────────────────
+model ReturnAlert {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  returnSlotId String
+  returnSlot   ReturnSlot @relation(fields: [returnSlotId], references: [id])
+  notified     Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, returnSlotId])
+  @@index([returnSlotId, notified])
+}
+
+// ─────────────────────────────────────
+// ROUTE ALERTS
+// ─────────────────────────────────────
+model RouteAlert {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  fromCity  String
+  toCity    String
+  date      DateTime
+  notified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([fromCity, toCity, date, notified])
+}
+
+// ─────────────────────────────────────
+// GPS PINGS
+// ─────────────────────────────────────
+model GpsPing {
+  id        String   @id @default(uuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id])
+  lat       Float
+  lng       Float
+  speed     Float?
+  heading   Float?
+  timestamp DateTime @default(now())
+
+  @@index([tripId, timestamp])
+}
+
+// ─────────────────────────────────────
+// MESSAGES
+// ─────────────────────────────────────
+model Message {
+  id        String   @id @default(uuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id])
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([tripId, createdAt])
+}
+
+// ─────────────────────────────────────
+// RATINGS
+// ─────────────────────────────────────
+model Rating {
+  id        String     @id @default(uuid())
+  bookingId String     @unique
+  booking   Booking    @relation(fields: [bookingId], references: [id])
+  raterId   String
+  rater     User       @relation("RatingsGiven", fields: [raterId], references: [id])
+  rateeId   String
+  ratee     User       @relation("RatingsReceived", fields: [rateeId], references: [id])
+  score     Int
+  comment   String?
+  type      RatingType
+  createdAt DateTime   @default(now())
+
+  @@index([rateeId])
+}
+
+enum RatingType {
+  RIDER_TO_DRIVER
+  DRIVER_TO_RIDER
 }
