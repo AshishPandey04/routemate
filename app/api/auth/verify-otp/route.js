@@ -28,7 +28,7 @@ export async function POST(request) {
       )
     }
 
-    if (storedOTP !== otp) {
+    if (String(storedOTP) !== String(otp)) {
       return NextResponse.json(
         { error: 'Invalid OTP. Please try again.' },
         { status: 400 }
