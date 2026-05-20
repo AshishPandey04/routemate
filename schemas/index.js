@@ -29,16 +29,15 @@ export const carSchema = z.object({
   isAC:        z.boolean(),
 })
 
-// Trips
 export const createTripSchema = z.object({
   carId:               z.string().uuid(),
   originCity:          z.string().min(1),
   destCity:            z.string().min(1),
-  departureTime:       z.string().datetime(),
+  departureTime:       z.string().min(1),  // accept any date string
   pricePerKm:          z.number().min(0.5).max(20),
   allowSharing:        z.boolean(),
   offerReturn:         z.boolean(),
-  estimatedReturnDate: z.string().datetime().optional(),
+  estimatedReturnDate: z.string().optional(),
 })
 
 // Bookings
