@@ -49,6 +49,7 @@ export const holdSchema = z.object({
 })
 
 export const confirmSchema = z.object({
+  tripId:            z.string().uuid(),
   razorpayOrderId:   z.string(),
   razorpayPaymentId: z.string(),
   razorpaySignature: z.string(),
