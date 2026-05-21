@@ -19,6 +19,7 @@ model User {
   role         Role     @default(RIDER)
   isVerified   Boolean  @default(false)
   isActive     Boolean  @default(true)
+  fcmToken     String?  // ← add this line
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
