@@ -10,7 +10,7 @@ export async function PATCH(request, { params }) {
       { status: auth.status }
     )
 
-    const { tripId } = params
+    const { tripId } = await params
 
     const trip = await prisma.trip.findUnique({ where: { id: tripId } })
 
