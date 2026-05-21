@@ -5,12 +5,9 @@ import { getAuthUser } from '@/lib/get-auth-user.js'
 import { checkSeatAvailability } from '@/lib/algorithms/seat-allocator.js'
 import { validateSegment, calculateSegmentPrice } from '@/lib/algorithms/route-matcher.js'
 import { holdSchema } from '@/schemas/index.js'
-import Razorpay from 'razorpay'
+import { createOrder } from '@/lib/razorpay.js'
 
-const razorpay = new Razorpay({
-  key_id:     process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-})
+
 
 export async function POST(request) {
   try {
@@ -141,17 +138,14 @@ export async function POST(request) {
     )
 
     // Create Razorpay order
-    const order = await razorpay.orders.create({
-      amount:   totalAmount * 100,  // Razorpay uses paise
-      currency: 'INR',
-      notes: {
-        tripId,
-        userId:        auth.user.id,
-        boardingCity,
-        alightingCity,
-        seatsRequested,
-      }
-    })
+// Create Razorpay order
+const order = await createOrder(totalAmount, {
+  tripId,
+  userId:        auth.user.id,
+  boardingCity,
+  alightingCity,
+  seatsRequested,
+})
 
     // Store hold in Redis (8 min TTL)
     const holdData = {
@@ -166,11 +160,12 @@ export async function POST(request) {
       razorpayOrderId: order.id,
     }
 
-    await redis.set(
-      `hold:${tripId}:${auth.user.id}`,
-      JSON.stringify(holdData),
-      { ex: 480 }  // 8 minutes
-    )
+   // In hold route — keep as is (stringify on store)
+await redis.set(
+  `hold:${tripId}:${auth.user.id}`,
+  JSON.stringify(holdData),
+  { ex: 480 }
+)
 
     const expiresAt = new Date(Date.now() + 8 * 60 * 1000)
 

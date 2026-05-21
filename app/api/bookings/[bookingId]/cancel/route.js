@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma.js'
 import { getAuthUser } from '@/lib/get-auth-user.js'
+import { initiateRefund } from '@/lib/razorpay.js'
 
 export async function POST(request, { params }) {
   try {
@@ -33,30 +34,24 @@ export async function POST(request, { params }) {
 
     if (booking.trip.status === 'IN_TRANSIT') {
       return NextResponse.json(
-        { error: 'Cannot cancel a booking on a trip that is already in transit' },
+        { error: 'Cannot cancel a booking on an in-transit trip' },
         { status: 400 }
       )
     }
 
-    // Calculate refund amount based on time to departure
-    const now          = new Date()
-    const departure    = new Date(booking.trip.departureTime)
-    const hoursLeft    = (departure - now) / (1000 * 60 * 60)
+    // Calculate refund
+    const now       = new Date()
+    const departure = new Date(booking.trip.departureTime)
+    const hoursLeft = (departure - now) / (1000 * 60 * 60)
 
     let refundPercent = 0
-    let refundAmount  = 0
+    if      (hoursLeft > 24) refundPercent = 90
+    else if (hoursLeft >= 4) refundPercent = 50
+    else                     refundPercent = 0
 
-    if (hoursLeft > 24) {
-      refundPercent = 90
-    } else if (hoursLeft >= 4) {
-      refundPercent = 50
-    } else {
-      refundPercent = 0
-    }
+    const refundAmount = Math.round(booking.totalAmount * refundPercent / 100)
 
-    refundAmount = Math.round(booking.totalAmount * refundPercent / 100)
-
-    // Cancel booking + delete seat segment atomically
+    // Cancel atomically
     await prisma.$transaction(async (tx) => {
       await tx.booking.update({
         where: { id: bookingId },
@@ -67,24 +62,46 @@ export async function POST(request, { params }) {
         where: { bookingId }
       })
 
-      if (refundAmount > 0 && booking.payment) {
+      if (refundAmount > 0 && booking.payment?.razorpayPaymentId) {
+        // Update payment record first
         await tx.payment.update({
           where: { id: booking.payment.id },
           data: {
-            status:       refundPercent === 90 ? 'REFUNDED' : 'PARTIAL_REFUND',
+            status:      refundPercent === 90 ? 'REFUNDED' : 'PARTIAL_REFUND',
             refundAmount,
-            refundedAt:   new Date(),
+            refundedAt:  new Date(),
           }
         })
-        // TODO Phase 7: trigger actual Razorpay refund API call here
       }
     })
 
+    // Trigger Razorpay refund OUTSIDE transaction
+    // (external API call should never be inside a DB transaction)
+    if (refundAmount > 0 && booking.payment?.razorpayPaymentId) {
+      try {
+        const refund = await initiateRefund(
+          booking.payment.razorpayPaymentId,
+          refundAmount
+        )
+
+        // Update refund ID
+        await prisma.payment.update({
+          where: { id: booking.payment.id },
+          data:  { refundId: refund.id }
+        })
+
+      } catch (refundError) {
+        // Log but don't fail — booking is already cancelled
+        // BullMQ retry queue handles this in Phase 9
+        console.error('[REFUND ERROR] Will retry:', refundError.message)
+      }
+    }
+
     return NextResponse.json({
-      message:       'Booking cancelled successfully',
+      message:      'Booking cancelled successfully',
       refundAmount,
       refundPercent,
-      refundStatus:  refundAmount > 0 ? 'INITIATED' : 'NOT_APPLICABLE',
+      refundStatus: refundAmount > 0 ? 'INITIATED' : 'NOT_APPLICABLE',
     })
 
   } catch (error) {
