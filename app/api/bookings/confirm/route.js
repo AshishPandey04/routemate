@@ -45,18 +45,7 @@ export async function POST(request) {
       )
     }
 
-    // After verifyPaymentSignature call
-console.log('orderId received:  ', razorpayOrderId)
-console.log('paymentId received:', razorpayPaymentId)
-console.log('signature received:', razorpaySignature)
 
-const expectedSignature = crypto
-  .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-  .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-  .digest('hex')
-
-console.log('expected signature:', expectedSignature)
-console.log('match:             ', expectedSignature === razorpaySignature)
 
     // Step 2 — Idempotency check
     const existingPayment = await prisma.payment.findUnique({
