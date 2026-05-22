@@ -14,6 +14,7 @@ const protectedRoutes = [
 
 export async function proxy(request) {
   const { pathname } = request.nextUrl
+
   const isProtected = protectedRoutes.some(route =>
     pathname.startsWith(route)
   )

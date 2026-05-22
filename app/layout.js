@@ -1,32 +1,27 @@
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import { Toaster } from "sonner";
+import { Geist, Geist_Mono } from 'next/font/google'
+import './globals.css'
+import { Toaster } from 'sonner'
+import { AuthProvider } from '@/components/shared/AuthContext.js'
 
 const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+  variable: '--font-geist-sans',
+  subsets:  ['latin'],
+})
 
 export const metadata = {
-  title: "RouteMate",
-  description: "Cross-city car rentals with en-route boarding",
-};
+  title:       'RouteMate — Cross-City Car Journeys',
+  description: 'Rent cars across cities with en-route boarding and return trips',
+}
 
 export default function RootLayout({ children }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="en" className={`${geistSans.variable} h-full`}>
       <body className="min-h-full flex flex-col">
-        {children}
-        <Toaster position="top-right" richColors />
+        <AuthProvider>
+          {children}
+          <Toaster position="top-right" richColors theme="dark" />
+        </AuthProvider>
       </body>
     </html>
-  );
+  )
 }

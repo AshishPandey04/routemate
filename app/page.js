@@ -1,65 +1,207 @@
-import Image from "next/image";
+import Link from 'next/link'
+import { Car, MapPin, ArrowRight, Users, Navigation, RotateCcw } from 'lucide-react'
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+
+      {/* Navbar */}
+      <nav style={{
+        padding:        '20px 40px',
+        display:        'flex',
+        justifyContent: 'space-between',
+        alignItems:     'center',
+        borderBottom:   '1px solid var(--border)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            width: '32px', height: '32px',
+            background: 'var(--amber)',
+            borderRadius: '8px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <Car size={18} color="#000" />
+          </div>
+          <span style={{
+            fontFamily: 'Syne', fontWeight: 800, fontSize: '20px'
+          }}>
+            Route<span style={{ color: 'var(--amber)' }}>Mate</span>
+          </span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <Link href="/login">
+            <button className="btn-secondary" style={{ width: 'auto', padding: '10px 24px' }}>
+              Login
+            </button>
+          </Link>
+          <Link href="/signup">
+            <button className="btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>
+              Get Started
+            </button>
+          </Link>
         </div>
-      </main>
+      </nav>
+
+      {/* Hero */}
+      <div style={{
+        maxWidth: '1200px',
+        margin:   '0 auto',
+        padding:  '80px 40px',
+        textAlign: 'center',
+      }}>
+        <div className="badge badge-amber" style={{ marginBottom: '24px' }}>
+          🚗 Cross-city car travel, reimagined
+        </div>
+
+        <h1 style={{
+          fontFamily:  'Syne',
+          fontSize:    'clamp(40px, 7vw, 80px)',
+          fontWeight:  800,
+          lineHeight:  1.05,
+          marginBottom: '24px',
+          letterSpacing: '-2px',
+        }}>
+          Travel between cities.<br />
+          <span style={{ color: 'var(--amber)' }}>Share the journey.</span>
+        </h1>
+
+        <p style={{
+          fontSize:    '18px',
+          color:       'var(--muted)',
+          maxWidth:    '560px',
+          margin:      '0 auto 40px',
+          lineHeight:  1.6,
+        }}>
+          Rent cars across states. Board mid-route from your city.
+          See return trips before they happen.
+        </p>
+
+        <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Link href="/search">
+            <button className="btn-primary" style={{
+              width: 'auto', padding: '14px 32px', fontSize: '16px',
+              display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              Find a Ride <ArrowRight size={18} />
+            </button>
+          </Link>
+          <Link href="/signup">
+            <button className="btn-secondary" style={{ width: 'auto', padding: '14px 32px', fontSize: '16px' }}>
+              List Your Car
+            </button>
+          </Link>
+        </div>
+
+        {/* Route Preview */}
+        <div style={{
+          marginTop:     '80px',
+          background:    'var(--bg-card)',
+          border:        '1px solid var(--border)',
+          borderRadius:  '16px',
+          padding:       '32px',
+          maxWidth:      '600px',
+          margin:        '80px auto 0',
+        }}>
+          <div style={{
+            display:       'flex',
+            alignItems:    'center',
+            gap:           '12px',
+            marginBottom:  '16px',
+          }}>
+            <MapPin size={16} color="var(--amber)" />
+            <span style={{ fontFamily: 'Syne', fontWeight: 600 }}>Jaipur</span>
+            <div style={{
+              flex: 1,
+              borderTop: '2px dashed var(--border)',
+              position: 'relative',
+            }}>
+              <div style={{
+                position:   'absolute',
+                top:        '-8px',
+                left:       '50%',
+                transform:  'translateX(-50%)',
+                background: 'var(--bg-card)',
+                padding:    '0 8px',
+              }}>
+                <span className="badge badge-amber" style={{ fontSize: '11px' }}>
+                  En-route boarding
+                </span>
+              </div>
+            </div>
+            <MapPin size={16} color="var(--muted)" />
+            <span style={{ fontFamily: 'Syne', fontWeight: 600 }}>Mumbai</span>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            gap:     '8px',
+            flexWrap: 'wrap',
+          }}>
+            {['Jaipur', 'Ajmer', 'Udaipur', 'Ahmedabad', 'Surat', 'Mumbai'].map((city, i) => (
+              <div key={city} style={{
+                display:    'flex',
+                alignItems: 'center',
+                gap:        '6px',
+              }}>
+                <span style={{
+                  background:   i === 0 || i === 5 ? 'var(--amber)' : 'var(--bg-input)',
+                  color:        i === 0 || i === 5 ? '#000' : 'var(--text)',
+                  padding:      '6px 12px',
+                  borderRadius: '100px',
+                  fontSize:     '13px',
+                  fontFamily:   'Syne',
+                  fontWeight:   600,
+                }}>
+                  {city}
+                </span>
+                {i < 5 && <ArrowRight size={12} color="var(--muted)" />}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Features */}
+        <div style={{
+          display:      'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap:          '24px',
+          marginTop:    '80px',
+        }}>
+          {[
+            {
+              icon:  <Navigation size={24} color="var(--amber)" />,
+              title: 'En-route Boarding',
+              desc:  'Sitting in Ajmer? Board a car passing through from Jaipur to Mumbai.',
+            },
+            {
+              icon:  <RotateCcw size={24} color="var(--amber)" />,
+              title: 'Return Trip Visibility',
+              desc:  'See cars at their destination that will return to your city.',
+            },
+            {
+              icon:  <Users size={24} color="var(--amber)" />,
+              title: 'Seat Sharing',
+              desc:  'Multiple riders can share the same car on different segments.',
+            },
+          ].map((feature) => (
+            <div key={feature.title} className="card" style={{ textAlign: 'left' }}>
+              <div style={{ marginBottom: '16px' }}>{feature.icon}</div>
+              <h3 style={{
+                fontFamily:   'Syne',
+                fontWeight:   700,
+                fontSize:     '18px',
+                marginBottom: '8px',
+              }}>
+                {feature.title}
+              </h3>
+              <p style={{ color: 'var(--muted)', fontSize: '14px', lineHeight: 1.6 }}>
+                {feature.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
-  );
+  )
 }
