@@ -20,7 +20,18 @@ export async function GET(request, { params }) {
         waypoints:  { orderBy: { sequenceIndex: 'asc' } },
         car:        { select: { make: true, model: true, plateNumber: true, isAC: true } },
         driver:     { select: { id: true, name: true, ratingsReceived: true } },
-        returnSlot: true,
+        returnSlot: {
+          include: {
+            returnAlerts: true
+          }
+        },
+        // Include bookings for driver view
+        bookings: {
+          include: {
+            user: { select: { id: true, name: true, phone: true } }
+          },
+          orderBy: { createdAt: 'desc' }
+        }
       }
     })
 

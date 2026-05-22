@@ -1,45 +1,40 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { MapPin } from 'lucide-react'
 import api from '@/lib/api.js'
 
-export default function CityAutocomplete({
-  value,
-  onChange,
-  placeholder = 'City',
-  pinColor = 'var(--amber)',
-  required = false,
-  inputStyle = {},
-}) {
+export default function CityAutocomplete({ value, onChange, placeholder }) {
+  const [query,       setQuery]       = useState(value || '')
   const [suggestions, setSuggestions] = useState([])
-  const [open, setOpen]               = useState(false)
-  const [loading, setLoading]         = useState(false)
-  const debounceRef                   = useRef(null)
-  const wrapRef                       = useRef(null)
+  const [open,        setOpen]        = useState(false)
+  const [loading,     setLoading]     = useState(false)
+  const timerRef                      = useRef(null)
+  const wrapperRef                    = useRef(null)
 
+  // Close on outside click
   useEffect(() => {
-    function handleClick(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+    function handler(e) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
         setOpen(false)
       }
     }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  function handleInput(val) {
+  function handleInput(e) {
+    const val = e.target.value
+    setQuery(val)
     onChange(val)
-    clearTimeout(debounceRef.current)
-    if (val.length < 2) {
-      setSuggestions([])
-      setOpen(false)
-      return
-    }
-    debounceRef.current = setTimeout(async () => {
+
+    clearTimeout(timerRef.current)
+    if (val.length < 2) { setSuggestions([]); setOpen(false); return }
+
+    timerRef.current = setTimeout(async () => {
       setLoading(true)
       try {
-        const res = await api.get('/search/cities', { params: { q: val } })
+        const res = await api.get(`/search/cities?q=${encodeURIComponent(val)}`)
         setSuggestions(res.data.cities || [])
         setOpen(true)
       } catch {
@@ -47,92 +42,83 @@ export default function CityAutocomplete({
       } finally {
         setLoading(false)
       }
-    }, 300)
+    }, 350)
   }
 
-  function selectCity(city) {
+  function select(city) {
+    setQuery(city.name)
     onChange(city.name)
-    setSuggestions([])
     setOpen(false)
+    setSuggestions([])
   }
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
-      <MapPin
-        size={16}
-        color={pinColor}
-        style={{
-          position:  'absolute',
-          left:      '12px',
-          top:       '50%',
-          transform: 'translateY(-50%)',
-          zIndex:    1,
+    <div ref={wrapperRef} style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }}>
+        <MapPin size={16} color="var(--amber)" style={{
+          position: 'absolute', left: '12px',
+          top: '50%', transform: 'translateY(-50%)',
           pointerEvents: 'none',
-        }}
-      />
-      <input
-        className="input"
-        placeholder={placeholder}
-        value={value}
-        onChange={e => handleInput(e.target.value)}
-        onFocus={() => value.length >= 2 && suggestions.length > 0 && setOpen(true)}
-        required={required}
-        autoComplete="off"
-        style={{ paddingLeft: '36px', ...inputStyle }}
-      />
-      {loading && (
-        <span style={{
-          position:  'absolute',
-          right:     '12px',
-          top:       '50%',
-          transform: 'translateY(-50%)',
-          fontSize:  '11px',
-          color:     'var(--muted)',
-        }}>
-          ...
-        </span>
-      )}
+        }} />
+        <input
+          className="input"
+          placeholder={placeholder || 'Enter city'}
+          value={query}
+          onChange={handleInput}
+          onFocus={() => suggestions.length > 0 && setOpen(true)}
+          style={{ paddingLeft: '36px' }}
+          autoComplete="off"
+        />
+        {loading && (
+          <span style={{
+            position: 'absolute', right: '12px',
+            top: '50%', transform: 'translateY(-50%)',
+            fontSize: '11px', color: 'var(--muted)',
+          }}>
+            ...
+          </span>
+        )}
+      </div>
+
       {open && suggestions.length > 0 && (
-        <ul style={{
-          position:     'absolute',
-          top:          '100%',
-          left:         0,
-          right:        0,
-          marginTop:    '4px',
-          background:   'var(--bg-card)',
-          border:       '1px solid var(--border)',
+        <div style={{
+          position:    'absolute',
+          top:         '100%',
+          left:        0,
+          right:       0,
+          background:  'var(--bg-card)',
+          border:      '1px solid var(--border)',
           borderRadius: '8px',
-          listStyle:    'none',
-          zIndex:       50,
-          maxHeight:    '220px',
-          overflowY:    'auto',
-          boxShadow:    '0 8px 24px rgba(0,0,0,0.4)',
+          marginTop:   '4px',
+          zIndex:      200,
+          overflow:    'hidden',
+          boxShadow:   '0 8px 32px rgba(0,0,0,0.4)',
         }}>
-          {suggestions.map(city => (
-            <li
-              key={city.placeId}
-              onMouseDown={e => {
-                e.preventDefault()
-                selectCity(city)
-              }}
+          {suggestions.map((city, i) => (
+            <div
+              key={i}
+              onClick={() => select(city)}
               style={{
-                padding:    '10px 14px',
+                padding:    '12px 16px',
                 cursor:     'pointer',
                 fontSize:   '14px',
-                borderBottom: '1px solid var(--border)',
+                borderBottom: i < suggestions.length - 1 ? '1px solid var(--border)' : 'none',
+                transition: 'background 0.15s',
+                display:    'flex',
+                alignItems: 'center',
+                gap:        '10px',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-input)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <div style={{ fontWeight: 600 }}>{city.name}</div>
-              {city.fullName !== city.name && (
-                <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>
-                  {city.fullName}
-                </div>
-              )}
-            </li>
+              <MapPin size={13} color="var(--muted)" />
+              <div>
+                <div style={{ fontWeight: 600 }}>{city.name}</div>
+                <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{city.fullName}</div>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   )

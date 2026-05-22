@@ -1,22 +1,25 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { useAuth } from '@/components/shared/AuthContext.js'
 import api from '@/lib/api.js'
-import { ArrowLeft, Star } from 'lucide-react'
+import { Star, ThumbsUp, Car } from 'lucide-react'
 
 export default function UserProfilePage() {
-  const router = useRouter()
-  const params = useParams()
-  const userId = params.userId
+  const { user, loading } = useAuth()
+  const router            = useRouter()
+  const params            = useParams()
+  const userId            = params.userId
 
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [profile,  setProfile]  = useState(null)
+  const [fetching, setFetching] = useState(true)
 
   useEffect(() => {
+    if (!loading && !user) router.push('/login')
     if (userId) fetchProfile()
-  }, [userId])
+  }, [userId, loading, user])
 
   async function fetchProfile() {
     try {
@@ -24,69 +27,101 @@ export default function UserProfilePage() {
       setProfile(res.data)
     } catch {
       toast.error('Failed to load profile')
-      router.back()
     } finally {
-      setLoading(false)
+      setFetching(false)
     }
   }
 
-  if (loading) {
-    return <div style={{ color: 'var(--muted)', padding: '40px 0' }}>Loading...</div>
-  }
+  if (loading || fetching) return (
+    <div style={{ color: 'var(--muted)', padding: '60px 0', textAlign: 'center' }}>Loading...</div>
+  )
+
+  if (!profile) return null
 
   return (
-    <div style={{ maxWidth: '560px' }}>
-      <button
-        type="button"
-        onClick={() => router.back()}
-        style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
-          background: 'none', border: 'none', color: 'var(--muted)',
-          cursor: 'pointer', marginBottom: '24px', fontSize: '14px',
-        }}
-      >
-        <ArrowLeft size={16} /> Back
-      </button>
-
-      <div className="card" style={{ marginBottom: '24px', textAlign: 'center' }}>
+    <div style={{ maxWidth: '600px' }}>
+      {/* Profile Header */}
+      <div className="card" style={{ marginBottom: '20px', textAlign: 'center' }}>
         <div style={{
-          width: '64px', height: '64px', borderRadius: '50%',
-          background: 'rgba(245,159,11,0.2)', margin: '0 auto 16px',
+          width:  '72px', height: '72px',
+          background: 'var(--bg-input)',
+          borderRadius: '50%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'Syne', fontWeight: 800, fontSize: '28px',
+          margin: '0 auto 16px',
         }}>
-          <Star size={28} color="var(--amber)" fill="var(--amber)" />
+          👤
         </div>
-        <div style={{ fontFamily: 'Syne', fontSize: '36px', fontWeight: 800, color: 'var(--amber)' }}>
-          {profile.averageScore ?? '—'}
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
+          {profile.averageScore ? (
+            <>
+              <Star size={20} color="var(--amber)" fill="var(--amber)" />
+              <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: '28px' }}>
+                {profile.averageScore}
+              </span>
+            </>
+          ) : (
+            <span style={{ color: 'var(--muted)', fontSize: '16px' }}>No ratings yet</span>
+          )}
         </div>
+
         <p style={{ color: 'var(--muted)', fontSize: '14px' }}>
           {profile.totalRatings} rating{profile.totalRatings !== 1 ? 's' : ''}
         </p>
       </div>
 
-      <h2 style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: '16px' }}>Recent reviews</h2>
-
-      {profile.recent?.length === 0 ? (
-        <p style={{ color: 'var(--muted)' }}>No reviews yet</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {profile.recent.map((r, i) => (
-            <div key={i} className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontWeight: 600 }}>{r.raterName}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Star size={14} color="var(--amber)" fill="var(--amber)" />
-                  {r.score}/5
-                </span>
+      {/* Ratings List */}
+      {profile.recent.length > 0 && (
+        <div className="card">
+          <h3 style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: '16px' }}>
+            Recent Reviews
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {profile.recent.map((rating, i) => (
+              <div key={i} style={{
+                paddingBottom: i < profile.recent.length - 1 ? '16px' : 0,
+                borderBottom:  i < profile.recent.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '32px', height: '32px',
+                      background: 'var(--bg-input)',
+                      borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '14px', fontWeight: 700,
+                    }}>
+                      {rating.raterName?.[0]?.toUpperCase()}
+                    </div>
+                    <span style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: '14px' }}>
+                      {rating.raterName}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {[1,2,3,4,5].map(star => (
+                      <Star
+                        key={star}
+                        size={14}
+                        color="var(--amber)"
+                        fill={star <= rating.score ? 'var(--amber)' : 'transparent'}
+                      />
+                    ))}
+                  </div>
+                </div>
+                {rating.comment && (
+                  <p style={{ fontSize: '14px', color: 'var(--muted)', lineHeight: 1.5 }}>
+                    "{rating.comment}"
+                  </p>
+                )}
+                <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '6px' }}>
+                  {new Date(rating.createdAt).toLocaleDateString('en-IN', {
+                    day: 'numeric', month: 'short', year: 'numeric'
+                  })}
+                </div>
               </div>
-              {r.comment && (
-                <p style={{ fontSize: '14px', color: 'var(--muted)', marginBottom: '8px' }}>{r.comment}</p>
-              )}
-              <p style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                {new Date(r.createdAt).toLocaleDateString('en-IN')}
-              </p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>

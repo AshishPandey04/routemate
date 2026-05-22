@@ -7,6 +7,21 @@ import { useAuth } from '@/components/shared/AuthContext.js'
 import api from '@/lib/api.js'
 import { ArrowRight, MapPin, Navigation, Star, X } from 'lucide-react'
 
+
+const [ratingModal, setRatingModal] = useState(null)  // bookingId
+const [ratingForm, setRatingForm]   = useState({ score: 5, comment: '' })
+
+async function submitRating(bookingId) {
+  try {
+    await api.post('/ratings', { bookingId, ...ratingForm })
+    toast.success('Rating submitted!')
+    setRatingModal(null)
+    fetchBookings()
+  } catch (err) {
+    toast.error(err.response?.data?.error || 'Failed to submit rating')
+  }
+}
+
 export default function MyBookingsPage() {
   const { user, loading } = useAuth()
   const router            = useRouter()
