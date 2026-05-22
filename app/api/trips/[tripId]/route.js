@@ -64,6 +64,20 @@ export async function GET(request, { params }) {
       ? (ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length).toFixed(1)
       : null
 
+    const isDriver = trip.driverId === auth.user.id
+
+    let bookings = []
+    if (isDriver) {
+      bookings = await prisma.booking.findMany({
+        where:   { tripId, status: { in: ['CONFIRMED', 'COMPLETED', 'CANCELLED'] } },
+        include: {
+          user: { select: { id: true, name: true, phone: true } },
+          rating: { select: { id: true, score: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+    }
+
     return NextResponse.json({
       trip: {
         ...trip,
@@ -75,6 +89,8 @@ export async function GET(request, { params }) {
           totalRatings: ratings.length,
         },
         segmentAvailability,
+        bookings: isDriver ? bookings : undefined,
+        isDriver,
       }
     })
 

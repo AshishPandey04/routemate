@@ -21,6 +21,9 @@ export async function GET(request) {
         },
         payment: {
           select: { status: true, refundAmount: true }
+        },
+        rating: {
+          select: { id: true, score: true }
         }
       },
       orderBy: { createdAt: 'desc' }

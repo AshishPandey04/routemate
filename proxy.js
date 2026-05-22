@@ -10,6 +10,8 @@ const protectedRoutes = [
   '/search',
   '/trip',
   '/track',
+  '/cars',
+  '/user',
 ]
 
 export async function proxy(request) {
