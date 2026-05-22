@@ -19,12 +19,16 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const res = await api.post('/auth/login', form)
-      login(res.data.user, res.data.token)
-      toast.success(`Welcome back, ${res.data.user.name.split(' ')[0]}!`)
+      const res     = await api.post('/auth/login', form)
+      const payload = res.data.data ?? res.data
+      login(payload.user, payload.token)
+      toast.success(`Welcome back, ${payload.user.name.split(' ')[0]}!`)
       router.push('/dashboard')
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Login failed')
+      const errData = err.response?.data?.error
+      toast.error(
+        typeof errData === 'string' ? errData : errData?.message || 'Login failed'
+      )
     } finally {
       setLoading(false)
     }

@@ -1,3 +1,7 @@
+import { loadEnvLocal } from '../lib/load-env.js'
+
+loadEnvLocal()
+
 import { Worker, Queue } from 'bullmq'
 import { Redis } from 'ioredis'
 import prisma from '../lib/prisma.js'

@@ -5,7 +5,9 @@ import { getAuthUser } from '@/lib/get-auth-user.js'
 import { checkSeatAvailability } from '@/lib/algorithms/seat-allocator.js'
 import { confirmSchema } from '@/schemas/index.js'
 import { verifyPaymentSignature } from '@/lib/razorpay.js'
-import crypto from 'crypto'
+import { creditDriverOnBooking } from '@/lib/wallet-service.js'
+import { sendPushNotification } from '@/lib/fcm.js'
+import { invalidateCache, CacheKeys } from '@/lib/cache-v2.js'
 
 export async function POST(request) {
   try {
@@ -141,6 +143,38 @@ const booking = await prisma.$transaction(async (tx) => {
 
     // Step 5 — Delete Redis hold
     await redis.del(holdKey)
+
+    // Step 6 — Invalidate user's bookings cache
+    await invalidateCache(CacheKeys.userBookings(auth.user.id)).catch(() => {})
+
+    // Step 7 — Credit driver pending earnings
+    try {
+      await creditDriverOnBooking(booking.id)
+    } catch (walletErr) {
+      console.error('[WALLET CREDIT]', walletErr.message)
+    }
+
+    // Step 8 — Notify driver via FCM (best-effort)
+    try {
+      const trip = await prisma.trip.findUnique({
+        where:   { id: booking.tripId },
+        select:  { driverId: true }
+      })
+      const driver = trip ? await prisma.user.findUnique({
+        where:  { id: trip.driverId },
+        select: { fcmToken: true }
+      }) : null
+      if (driver?.fcmToken) {
+        await sendPushNotification(
+          driver.fcmToken,
+          '🎉 New Booking!',
+          `${booking.boardingCity} → ${booking.alightingCity} · ${booking.seatsBooked} seat${booking.seatsBooked > 1 ? 's' : ''} · ₹${booking.totalAmount}`,
+          { type: 'NEW_BOOKING', bookingId: booking.id, tripId: booking.tripId }
+        )
+      }
+    } catch (fcmErr) {
+      console.error('[FCM NOTIFY DRIVER]', fcmErr.message)
+    }
 
     return NextResponse.json({
       message: 'Booking confirmed successfully',

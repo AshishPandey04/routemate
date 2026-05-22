@@ -31,9 +31,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env.local
+# Env: only .env.local on disk (never commit)
 .env
+.env.example
+.env.development
+.env.production
+.env.local
 
 
 

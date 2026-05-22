@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma.js'
 import { getAuthUser } from '@/lib/get-auth-user.js'
+import { reverseBookingEarning } from '@/lib/wallet-service.js'
+import { sendMulticastNotification } from '@/lib/fcm.js'
 
 export async function PATCH(request, { params }) {
   try {
@@ -63,7 +65,6 @@ export async function PATCH(request, { params }) {
           where: { bookingId: booking.id }
         })
 
-        // TODO Phase 7: trigger Razorpay refund for each booking
       }
 
       // Cancel return slot if exists
@@ -72,6 +73,33 @@ export async function PATCH(request, { params }) {
         data:  { status: 'CANCELLED' }
       })
     })
+
+    for (const booking of trip.bookings) {
+      try {
+        await reverseBookingEarning(booking.id)
+      } catch (walletErr) {
+        console.error('[WALLET REVERSAL]', walletErr.message)
+      }
+    }
+
+    // Notify all affected riders via FCM (best-effort)
+    try {
+      const riderTokens = await prisma.user.findMany({
+        where:  { id: { in: trip.bookings.map(b => b.userId) }, fcmToken: { not: null } },
+        select: { fcmToken: true }
+      })
+      const tokens = riderTokens.map(u => u.fcmToken).filter(Boolean)
+      if (tokens.length > 0) {
+        await sendMulticastNotification(
+          tokens,
+          '⚠️ Trip Cancelled',
+          `Your trip from ${trip.originCity} to ${trip.destinationCity} was cancelled by the driver. Refund will be initiated.`,
+          { type: 'TRIP_CANCELLED', tripId }
+        )
+      }
+    } catch (fcmErr) {
+      console.error('[FCM TRIP CANCEL]', fcmErr.message)
+    }
 
     return NextResponse.json({
       message:          'Trip cancelled successfully',

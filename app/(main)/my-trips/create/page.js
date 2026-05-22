@@ -4,23 +4,24 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/shared/AuthContext.js'
-import api from '@/lib/api.js'
+import api, { getErrorMessage } from '@/lib/api.js'
 import { ArrowRight } from 'lucide-react'
+import CityAutocomplete from '@/components/shared/CityAutocomplete.js'
 
 export default function CreateTripPage() {
   const { user, loading } = useAuth()
-  const router            = useRouter()
-  const [cars, setCars]   = useState([])
+  const router = useRouter()
+  const [cars, setCars] = useState([])
   const [submitting, setSubmitting] = useState(false)
 
   const [form, setForm] = useState({
-    carId:               '',
-    originCity:          '',
-    destCity:            '',
-    departureTime:       '',
-    pricePerKm:          2,
-    allowSharing:        true,
-    offerReturn:         false,
+    carId: '',
+    originCity: '',
+    destCity: '',
+    departureTime: '',
+    pricePerKm: 2,
+    allowSharing: true,
+    offerReturn: false,
     estimatedReturnDate: '',
   })
 
@@ -54,7 +55,7 @@ export default function CreateTripPage() {
       toast.success('Trip created successfully!')
       router.push(`/my-trips`)
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to create trip')
+      toast.error(getErrorMessage(err, 'Failed to create trip'))
     } finally {
       setSubmitting(false)
     }
@@ -82,12 +83,10 @@ export default function CreateTripPage() {
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
                 FROM CITY
               </label>
-              <input
-                className="input"
-                placeholder="e.g. Jaipur"
+              <CityAutocomplete
                 value={form.originCity}
-                onChange={e => setForm({ ...form, originCity: e.target.value })}
-                required
+                onChange={val => setForm({ ...form, originCity: val })}
+                placeholder="e.g. Jaipur"
               />
             </div>
 
@@ -95,12 +94,10 @@ export default function CreateTripPage() {
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px' }}>
                 TO CITY
               </label>
-              <input
-                className="input"
-                placeholder="e.g. Mumbai"
+              <CityAutocomplete
                 value={form.destCity}
-                onChange={e => setForm({ ...form, destCity: e.target.value })}
-                required
+                onChange={val => setForm({ ...form, destCity: val })}
+                placeholder="e.g. Mumbai"
               />
             </div>
 
@@ -131,11 +128,11 @@ export default function CreateTripPage() {
               </label>
               {cars.length === 0 ? (
                 <div style={{
-                  padding:      '16px',
-                  background:   'var(--bg-input)',
+                  padding: '16px',
+                  background: 'var(--bg-input)',
                   borderRadius: '8px',
-                  fontSize:     '14px',
-                  color:        'var(--muted)',
+                  fontSize: '14px',
+                  color: 'var(--muted)',
                 }}>
                   No cars registered.{' '}
                   <button

@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma.js'
 import { getAuthUser } from '@/lib/get-auth-user.js'
 import { initiateRefund } from '@/lib/razorpay.js'
+import { reverseBookingEarning } from '@/lib/wallet-service.js'
+import { getRefundQueue } from '@/lib/queues.js'
+import { sendPushNotification } from '@/lib/fcm.js'
+import { invalidateCache, CacheKeys } from '@/lib/cache-v2.js'
 
 export async function POST(request, { params }) {
   try {
@@ -75,6 +79,15 @@ export async function POST(request, { params }) {
       }
     })
 
+    try {
+      await reverseBookingEarning(bookingId)
+    } catch (walletErr) {
+      console.error('[WALLET REVERSAL]', walletErr.message)
+    }
+
+    // Invalidate Redis cache for this user's bookings
+    await invalidateCache(CacheKeys.userBookings(booking.userId)).catch(() => {})
+
     // Trigger Razorpay refund OUTSIDE transaction
     // (external API call should never be inside a DB transaction)
     if (refundAmount > 0 && booking.payment?.razorpayPaymentId) {
@@ -83,18 +96,46 @@ export async function POST(request, { params }) {
           booking.payment.razorpayPaymentId,
           refundAmount
         )
-
-        // Update refund ID
         await prisma.payment.update({
           where: { id: booking.payment.id },
           data:  { refundId: refund.id }
         })
-
       } catch (refundError) {
-        // Log but don't fail — booking is already cancelled
-        // BullMQ retry queue handles this in Phase 9
-        console.error('[REFUND ERROR] Will retry:', refundError.message)
+        // First attempt failed — enqueue for retry via BullMQ
+        console.error('[REFUND ERROR] Queuing for retry:', refundError.message)
+        try {
+          const refundQueue = getRefundQueue()
+          await refundQueue.add('retry-refund', {
+            paymentId:       booking.payment.razorpayPaymentId,
+            amount:          refundAmount,
+            bookingId:       booking.id,
+            paymentRecordId: booking.payment.id,
+          })
+        } catch (queueErr) {
+          console.error('[REFUND QUEUE ERROR]', queueErr.message)
+        }
       }
+    }
+
+    // Notify rider via FCM (best-effort)
+    try {
+      const rider = await prisma.user.findUnique({
+        where:  { id: booking.userId },
+        select: { fcmToken: true }
+      })
+      if (rider?.fcmToken) {
+        const refundMsg = refundAmount > 0
+          ? ` Refund of ₹${refundAmount} initiated.`
+          : ' No refund applicable.'
+        await sendPushNotification(
+          rider.fcmToken,
+          '🚫 Booking Cancelled',
+          `Your booking from ${booking.boardingCity} → ${booking.alightingCity} has been cancelled.${refundMsg}`,
+          { type: 'BOOKING_CANCELLED', bookingId: booking.id }
+        )
+      }
+    } catch (fcmErr) {
+      console.error('[FCM BOOKING CANCEL]', fcmErr.message)
     }
 
     return NextResponse.json({

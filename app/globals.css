@@ -1,18 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 
 @import "tailwindcss";
 
 :root {
-  --bg:       #0f0f0f;
-  --bg-card:  #1a1a1a;
-  --bg-input: #222222;
-  --border:   #2a2a2a;
-  --text:     #f5f5f5;
-  --muted:    #6b7280;
+  --bg:       #f8fafc;
+  --bg-card:  #ffffff;
+  --bg-input: #f1f5f9;
+  --border:   #e2e8f0;
+  --text:     #0f172a;
+  --text-light: #475569;
+  --muted:    #64748b;
   --amber:    #f59e0b;
   --amber-dim: #92600a;
+  --blue:     #3b82f6;
   --red:      #ef4444;
-  --green:    #22c55e;
+  --green:    #10b981;
+  --purple:   #8b5cf6;
 }
 
 * {
@@ -28,10 +32,11 @@ html {
 body {
   background:  var(--bg);
   color:       var(--text);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', 'DM Sans', sans-serif;
   min-height:  100vh;
   -webkit-font-smoothing: antialiased;
-  line-height: 1.5;
+  line-height: 1.6;
+  letter-spacing: -0.3px;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -48,25 +53,34 @@ h1, h2, h3, h4, h5, h6 {
 .card {
   background:    var(--bg-card);
   border:        1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   padding:       24px;
+  box-shadow:    0 1px 3px rgba(0, 0, 0, 0.08);
+  transition:    all 0.3s ease;
+}
+
+.card:hover {
+  border-color: var(--blue);
+  box-shadow:   0 8px 24px rgba(59, 130, 246, 0.12);
 }
 
 .input {
   background:    var(--bg-input);
-  border:        1px solid var(--border);
-  border-radius: 8px;
+  border:        2px solid var(--border);
+  border-radius: 12px;
   color:         var(--text);
   padding:       12px 16px;
   width:         100%;
-  font-family:   'DM Sans', sans-serif;
+  font-family:   'Inter', sans-serif;
   font-size:     15px;
   outline:       none;
-  transition:    border-color 0.2s;
+  transition:    all 0.3s ease;
 }
 
 .input:focus {
-  border-color: var(--amber);
+  border-color: var(--blue);
+  background:   var(--bg-card);
+  box-shadow:   0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .input::placeholder {
@@ -74,59 +88,71 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .btn-primary {
-  background:    var(--amber);
-  color:         #000;
+  background:    linear-gradient(135deg, var(--blue) 0%, #2563eb 100%);
+  color:         #ffffff;
   border:        none;
-  border-radius: 8px;
-  padding:       12px 24px;
+  border-radius: 12px;
+  padding:       13px 24px;
   font-family:   'Syne', sans-serif;
   font-weight:   700;
   font-size:     15px;
   cursor:        pointer;
-  transition:    all 0.2s;
+  transition:    all 0.3s ease;
   width:         100%;
+  box-shadow:    0 4px 12px rgba(59, 130, 246, 0.3);
+  letter-spacing: 0.5px;
 }
 
 .btn-primary:hover {
-  background: #d97706;
-  transform:  translateY(-1px);
+  background:   linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform:    translateY(-2px);
+  box-shadow:   0 8px 20px rgba(59, 130, 246, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
 }
 
 .btn-primary:disabled {
-  opacity: 0.5;
-  cursor:  not-allowed;
+  opacity:  0.6;
+  cursor:   not-allowed;
   transform: none;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
 }
 
 .btn-secondary {
   background:    transparent;
   color:         var(--text);
-  border:        1px solid var(--border);
-  border-radius: 8px;
-  padding:       12px 24px;
+  border:        2px solid var(--border);
+  border-radius: 12px;
+  padding:       11px 24px;
   font-family:   'Syne', sans-serif;
   font-weight:   600;
   font-size:     15px;
   cursor:        pointer;
-  transition:    all 0.2s;
+  transition:    all 0.3s ease;
 }
 
 .btn-secondary:hover {
-  border-color: var(--amber);
-  color:        var(--amber);
+  border-color: var(--blue);
+  color:        var(--blue);
+  background:   rgba(59, 130, 246, 0.05);
+  box-shadow:   0 4px 12px rgba(59, 130, 246, 0.15);
 }
 
 .badge {
   display:       inline-flex;
   align-items:   center;
-  padding:       4px 10px;
-  border-radius: 100px;
+  padding:       6px 12px;
+  border-radius: 20px;
   font-size:     12px;
   font-weight:   600;
   font-family:   'Syne', sans-serif;
+  letter-spacing: 0.3px;
 }
 
-.badge-amber  { background: rgba(245,159,11,0.15); color: var(--amber); }
-.badge-green  { background: rgba(34,197,94,0.15);  color: var(--green); }
-.badge-red    { background: rgba(239,68,68,0.15);   color: var(--red); }
-.badge-muted  { background: rgba(107,114,128,0.15); color: var(--muted); }
+.badge-amber  { background: rgba(245,159,11,0.12); color: #b45309; }
+.badge-green  { background: rgba(16,185,129,0.12);  color: #047857; }
+.badge-blue   { background: rgba(59,130,246,0.12);   color: #1d4ed8; }
+.badge-red    { background: rgba(239,68,68,0.12);   color: #991b1b; }
+.badge-muted  { background: rgba(100,116,139,0.12); color: var(--muted); }

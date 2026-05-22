@@ -3,56 +3,59 @@ import bcrypt from 'bcryptjs'
 import prisma from '@/lib/prisma.js'
 import { signToken } from '@/lib/auth.js'
 import { loginSchema } from '@/schemas/index.js'
+import { apiSuccess, apiError } from '@/lib/api-response.js'
+import { CommonErrors, ErrorCode, AppError } from '@/lib/errors.js'
+import { applyRateLimit, getClientIp } from '@/lib/rate-limit.js'
 
 export async function POST(request) {
   try {
+    // Rate limit: 10 login attempts per minute per IP
+    const ip        = getClientIp(request)
+    const rateCheck = await applyRateLimit(`login:${ip}`, 10, 60)
+    if (!rateCheck.allowed) {
+      throw new AppError(
+        'Too many login attempts. Please try again later.',
+        ErrorCode.TOO_MANY_REQUESTS,
+        429
+      )
+    }
+
     const body = await request.json()
 
     const result = loginSchema.safeParse(body)
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error.errors[0].message },
-        { status: 400 }
+      throw new AppError(
+        result.error.issues?.[0]?.message || 'Validation failed',
+        ErrorCode.VALIDATION_ERROR,
+        400
       )
     }
 
     const { email, password } = result.data
 
-    // Find user
+    // ✅ FIXED: Prevent timing attack with constant-time comparison
+    // Always call bcrypt.compare even if user doesn't exist
     const user = await prisma.user.findUnique({
       where: { email }
     })
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401 }
-      )
+    // Prepare a dummy hash for comparison if user not found (prevents timing attack)
+    const hashToCompare = user?.passwordHash || '$2a$12$invalid.hash.for.timing.attack'
+    const passwordMatch = await bcrypt.compare(password, hashToCompare)
+
+    // Always return same error message regardless of whether user exists
+    if (!user || !passwordMatch) {
+      throw CommonErrors.invalidCredentials()
     }
 
     // Check if verified
     if (!user.isVerified) {
-      return NextResponse.json(
-        { error: 'Please verify your phone number first.' },
-        { status: 403 }
-      )
+      throw CommonErrors.unverifiedAccount()
     }
 
     // Check if active
     if (!user.isActive) {
-      return NextResponse.json(
-        { error: 'Account suspended. Contact support.' },
-        { status: 403 }
-      )
-    }
-
-    // Verify password
-    const passwordMatch = await bcrypt.compare(password, user.passwordHash)
-    if (!passwordMatch) {
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401 }
-      )
+      throw CommonErrors.accountSuspended()
     }
 
     // Issue JWT
@@ -61,8 +64,7 @@ export async function POST(request) {
       role:   user.role,
     })
 
-    const response = NextResponse.json({
-      message: 'Login successful',
+    const response = apiSuccess({
       token,
       user: {
         id:    user.id,
@@ -73,6 +75,7 @@ export async function POST(request) {
       }
     })
 
+    // ✅ FIXED: Set HttpOnly cookie (replaces localStorage)
     response.cookies.set('token', token, {
       httpOnly: true,
       secure:   process.env.NODE_ENV === 'production',
@@ -84,10 +87,6 @@ export async function POST(request) {
     return response
 
   } catch (error) {
-    console.error('[LOGIN ERROR]', error)
-    return NextResponse.json(
-      { error: 'Something went wrong. Please try again.' },
-      { status: 500 }
-    )
+    return apiError(error)
   }
 }

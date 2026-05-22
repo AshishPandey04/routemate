@@ -19,27 +19,35 @@ export async function GET(request) {
     const trips = await prisma.trip.findMany({
       where,
       include: {
-        car:      { select: { make: true, model: true, plateNumber: true } },
-        _count:   { select: { bookings: true } },
+        car:    { select: { make: true, model: true, plateNumber: true } },
+        _count: { select: { bookings: true } },
       },
       orderBy: { departureTime: 'desc' }
     })
 
-    // Calculate earnings per trip
-    const tripsWithEarnings = await Promise.all(
-      trips.map(async (trip) => {
-        const bookings = await prisma.booking.aggregate({
-          where:  { tripId: trip.id, status: { in: ['CONFIRMED', 'COMPLETED'] } },
-          _sum:   { totalAmount: true }
-        })
+    if (trips.length === 0) {
+      return NextResponse.json({ trips: [] })
+    }
 
-        return {
-          ...trip,
-          bookingsCount:  trip._count.bookings,
-          totalEarnings:  bookings._sum.totalAmount || 0,
-        }
-      })
+    // Single groupBy query replaces N individual aggregate calls
+    const earningsByTrip = await prisma.booking.groupBy({
+      by:     ['tripId'],
+      where:  {
+        tripId: { in: trips.map(t => t.id) },
+        status: { in: ['CONFIRMED', 'COMPLETED'] },
+      },
+      _sum: { totalAmount: true },
+    })
+
+    const earningsMap = new Map(
+      earningsByTrip.map(e => [e.tripId, e._sum.totalAmount || 0])
     )
+
+    const tripsWithEarnings = trips.map(trip => ({
+      ...trip,
+      bookingsCount: trip._count.bookings,
+      totalEarnings: earningsMap.get(trip.id) || 0,
+    }))
 
     return NextResponse.json({ trips: tripsWithEarnings })
 

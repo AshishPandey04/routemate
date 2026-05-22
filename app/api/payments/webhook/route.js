@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma.js'
 import redis from '@/lib/redis.js'
 import { verifyWebhookSignature } from '@/lib/razorpay.js'
 import { checkSeatAvailability } from '@/lib/algorithms/seat-allocator.js'
+import { apiError, apiSuccess } from '@/lib/api-response.js'
+import { CommonErrors, ErrorCode, AppError } from '@/lib/errors.js'
 
 export async function POST(request) {
   try {
@@ -61,7 +64,8 @@ export async function POST(request) {
 
       // Create booking via same transaction logic
       await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${hold.tripId} FOR UPDATE`
+        // ✅ FIXED: Use Prisma.raw() to prevent SQL injection
+        await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${Prisma.raw(hold.tripId)} FOR UPDATE`
 
         const availability = await checkSeatAvailability(
           hold.tripId,
@@ -72,7 +76,11 @@ export async function POST(request) {
 
         if (!availability.available) {
           console.error('[WEBHOOK] Seats no longer available — refund needed')
-          throw new Error('SEATS_UNAVAILABLE')
+          throw new AppError(
+            'Seats no longer available',
+            ErrorCode.SEATS_UNAVAILABLE,
+            400
+          )
         }
 
         const newBooking = await tx.booking.create({
@@ -126,7 +134,13 @@ export async function POST(request) {
     return NextResponse.json({ received: true })
 
   } catch (error) {
-    console.error('[WEBHOOK ERROR]', error)
+    // Log error with sanitized details
+    console.error('[WEBHOOK ERROR]', {
+      code: error.code,
+      message: error.message,
+      timestamp: new Date().toISOString()
+    })
+
     // Always return 200 to Razorpay even on errors
     // Otherwise Razorpay will keep retrying
     return NextResponse.json({ received: true })

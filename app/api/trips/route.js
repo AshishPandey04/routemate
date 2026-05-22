@@ -12,8 +12,6 @@ export async function POST(request) {
             { status: auth.status }
         )
 
-        console.log('Auth user role:', auth.user.role)
-
         if (auth.user.role === 'RIDER') {
             return NextResponse.json(
                 { error: 'Only drivers can create trips' },
@@ -22,13 +20,10 @@ export async function POST(request) {
         }
 
         const body = await request.json()
-        console.log('Request body:', JSON.stringify(body))
 
         const result = createTripSchema.safeParse(body)
-        console.log('Schema valid:', result.success)
 
         if (!result.success) {
-            console.log('Schema errors:', JSON.stringify(result.error))
             return NextResponse.json(
                 { error: result.error.issues?.[0]?.message || 'Validation failed' },
                 { status: 400 }
@@ -47,7 +42,6 @@ export async function POST(request) {
         } = result.data
 
         const car = await prisma.car.findUnique({ where: { id: carId } })
-        console.log('Car found:', !!car)
 
         if (!car || car.ownerId !== auth.user.id || !car.isActive) {
             return NextResponse.json(
@@ -58,11 +52,8 @@ export async function POST(request) {
 
         let routeData
         try {
-            console.log('Fetching route:', originCity, '→', destCity)
             routeData = await getRouteDetails(originCity, destCity)
-            console.log('Route cities:', routeData.cities)
         } catch (mapError) {
-            console.log('Maps error:', mapError.message)
             return NextResponse.json(
                 { error: `Could not calculate route: ${mapError.message}` },
                 { status: 400 }
@@ -74,6 +65,7 @@ export async function POST(request) {
             distanceKm,
             encodedPolyline,
             cityETAs,
+            cityCoordinates,
             originLat,
             originLng,
             destinationLat,
@@ -109,11 +101,12 @@ export async function POST(request) {
             const waypointData = cities.map((city, index) => {
                 const etaSeconds = cityETAs[city] || 0
                 const waypointArrival = new Date(departure.getTime() + etaSeconds * 1000)
+                const coords = cityCoordinates?.[city]
                 return {
                     tripId: newTrip.id,
                     cityName: city,
-                    lat: 0,
-                    lng: 0,
+                    lat: coords?.lat ?? 0,
+                    lng: coords?.lng ?? 0,
                     sequenceIndex: index,
                     estimatedArrival: waypointArrival,
                 }

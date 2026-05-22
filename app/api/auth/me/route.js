@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma.js'
 import { verifyToken, getTokenFromHeader } from '@/lib/auth.js'
+import { isAdminUser } from '@/lib/is-admin.js'
 
 export async function GET(request) {
   try {
@@ -44,7 +45,9 @@ export async function GET(request) {
       )
     }
 
-    return NextResponse.json({ user })
+    return NextResponse.json({
+      user: { ...user, isAdmin: isAdminUser(user) },
+    })
 
   } catch (error) {
     console.error('[ME ERROR]', error)
