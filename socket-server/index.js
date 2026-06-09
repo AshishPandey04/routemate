@@ -1,11 +1,29 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { createServer } from 'http'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+dotenv.config({ path: path.resolve(__dirname, '..', '.env.local') })
+
 import { Server } from 'socket.io'
 import { Redis } from '@upstash/redis'
 import { jwtVerify } from 'jose'
+import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
+import pg from 'pg'
 
-const PORT   = process.env.SOCKET_PORT || 3001
+const { Pool } = pg
+
+const PORT   = process.env.SOCKET_SERVER_PORT || process.env.SOCKET_PORT || 3001
 const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+
+// Mirror lib/prisma.js — must use the PrismaPg adapter since the schema uses it
+const pool   = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+})
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) })
 
 // Redis client for pub/sub
 const redis = new Redis({
@@ -13,7 +31,39 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 })
 
-const httpServer = createServer()
+const INTERNAL_SECRET = process.env.INTERNAL_SOCKET_SECRET
+
+const httpServer = createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/internal/broadcast-location') {
+    const secret = req.headers['x-internal-secret']
+    if (!INTERNAL_SECRET || secret !== INTERNAL_SECRET) {
+      res.writeHead(401)
+      res.end('Unauthorized')
+      return
+    }
+
+    let body = ''
+    req.on('data', (chunk) => { body += chunk })
+    req.on('end', () => {
+      try {
+        const { tripId, location } = JSON.parse(body)
+        if (tripId && location) {
+          io.to(`trip:${tripId}`).emit('location-update', location)
+        }
+        res.writeHead(200)
+        res.end('ok')
+      } catch {
+        res.writeHead(400)
+        res.end('Bad request')
+      }
+    })
+    return
+  }
+
+  res.writeHead(404)
+  res.end()
+})
+
 const io         = new Server(httpServer, {
   cors: {
     origin:  process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
@@ -72,16 +122,33 @@ io.on('connection', (socket) => {
   })
 
   // ── Send message ──────────────────────────────────────────
-  socket.on('send-message', ({ tripId, content }) => {
-    if (!tripId || !content) return
+  socket.on('send-message', async ({ tripId, content }) => {
+    if (!tripId || !content?.trim()) return
 
-    const message = {
-      senderId:  socket.userId,
-      content,
-      createdAt: new Date().toISOString(),
+    try {
+      // Persist to DB first so the message survives a refresh
+      const saved = await prisma.message.create({
+        data: {
+          tripId,
+          senderId: socket.userId,
+          content:  content.trim(),
+        },
+        include: { sender: { select: { id: true, name: true } } },
+      })
+
+      // Broadcast the persisted message (includes real id + createdAt)
+      io.to(`trip:${tripId}`).emit('new-message', {
+        id:        saved.id,
+        tripId:    saved.tripId,
+        senderId:  saved.senderId,
+        sender:    saved.sender,
+        content:   saved.content,
+        createdAt: saved.createdAt.toISOString(),
+      })
+    } catch (err) {
+      console.error('[SOCKET] Failed to persist message:', err.message)
+      socket.emit('message-error', { error: 'Failed to send message' })
     }
-
-    io.to(`trip:${tripId}`).emit('new-message', message)
   })
 
   // ── Disconnect ────────────────────────────────────────────

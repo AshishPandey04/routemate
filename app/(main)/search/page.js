@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import api from '@/lib/api.js'
+import api, { getErrorMessage } from '@/lib/api.js'
 import CityAutocomplete from '@/components/shared/CityAutocomplete.js'
 import {
   Search, Calendar, Users,
@@ -31,9 +31,11 @@ export default function SearchPage() {
     }
     setLoading(true)
     try {
-      const res = await api.get('/search/trips', { params: form })
-      setResults(res.data)
-      const total = res.data.meta.totalResults
+      const res  = await api.get('/search/trips', { params: form })
+      // apiSuccess wraps the payload under res.data.data
+      const data = res.data.data ?? res.data
+      setResults(data)
+      const total = data.meta?.totalResults ?? 0
       if (total === 0) toast.info('No trips found. You can set an alert below.')
       else toast.success(`Found ${total} trip${total > 1 ? 's' : ''}`)
     } catch {
@@ -50,18 +52,18 @@ export default function SearchPage() {
         toCity:   form.to,
         date:     form.date,
       })
-      toast.success('Alert set! We\'ll notify you when a car is approaching.')
+      toast.success("Alert set! We'll notify you when a car is approaching.")
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to set alert')
+      toast.error(getErrorMessage(err, 'Failed to set alert'))
     }
   }
 
   async function setReturnAlert(returnSlotId) {
     try {
       await api.post('/alerts/return', { returnSlotId })
-      toast.success('You\'ll be notified when the driver confirms the return trip!')
+      toast.success("You'll be notified when the driver confirms the return trip!")
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to set alert')
+      toast.error(getErrorMessage(err, 'Failed to set return alert'))
     }
   }
 

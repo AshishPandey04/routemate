@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/shared/AuthContext.js'
@@ -11,7 +11,7 @@ import {
   Users, Clock, ChevronRight, Car
 } from 'lucide-react'
 
-export default function TripDetailPage() {
+function TripDetailContent() {
   const { user, loading } = useAuth()
   const router            = useRouter()
   const params            = useParams()
@@ -67,7 +67,7 @@ export default function TripDetailPage() {
         seatsRequested: seats,
       })
 
-      const { razorpayOrderId, amount } = holdRes.data
+      const { razorpayOrderId, amount } = holdRes.data.data ?? holdRes.data
 
       // Step 2 — Open Razorpay checkout
       await openRazorpayCheckout({
@@ -85,7 +85,10 @@ export default function TripDetailPage() {
             toast.success('Booking confirmed! 🎉')
             router.push('/my-bookings')
           } catch (err) {
-            toast.error(err.response?.data?.error || 'Booking confirmation failed')
+            const errData = err.response?.data?.error
+            toast.error(
+              typeof errData === 'string' ? errData : errData?.message || 'Booking confirmation failed'
+            )
           }
         },
         onFailure: (reason) => {
@@ -94,7 +97,10 @@ export default function TripDetailPage() {
         },
       })
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to initiate booking')
+      const errData = err.response?.data?.error
+      toast.error(
+        typeof errData === 'string' ? errData : errData?.message || 'Failed to initiate booking'
+      )
       setBooking(false)
     }
   }
@@ -419,4 +425,12 @@ function estimatePrice(trip, cities, from, to, seats) {
   if (fromIdx === -1 || toIdx === -1 || fromIdx >= toIdx) return 0
   const fraction = (toIdx - fromIdx) / (cities.length - 1)
   return Math.round(trip.distanceKm * fraction * trip.pricePerKm * seats)
+}
+
+export default function TripDetailPage() {
+  return (
+    <Suspense fallback={<div style={{ color: 'var(--muted)', padding: '40px 0' }}>Loading trip…</div>}>
+      <TripDetailContent />
+    </Suspense>
+  )
 }

@@ -32,7 +32,11 @@ export default function SignupPage() {
       setStep(2)
       toast.success('OTP sent to your phone!')
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Signup failed')
+      toast.error(
+        typeof err.response?.data?.error === 'string'
+          ? err.response.data.error
+          : err.response?.data?.error?.message || 'Signup failed'
+      )
     } finally {
       setLoading(false)
     }
@@ -50,7 +54,11 @@ export default function SignupPage() {
       toast.success('Phone verified! Please login.')
       router.push('/login')
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Invalid OTP')
+      toast.error(
+        typeof err.response?.data?.error === 'string'
+          ? err.response.data.error
+          : err.response?.data?.error?.message || 'Invalid OTP'
+      )
     } finally {
       setLoading(false)
     }

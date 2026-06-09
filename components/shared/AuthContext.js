@@ -15,32 +15,39 @@ export function AuthProvider({ children }) {
 
   async function fetchUser() {
     try {
-      const token = localStorage.getItem('token')
-      if (!token) { setLoading(false); return }
-
+      // ✅ FIXED: Token is now in HttpOnly cookie, automatically sent with requests
       const res = await axios.get('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
+        withCredentials: true // Include cookies in requests
       })
-      setUser(res.data.user)
-    } catch {
-      localStorage.removeItem('token')
+      const u = res.data.data?.user || res.data.user
+      setUser(u ? { ...u, isAdmin: u.isAdmin ?? false } : null)
+    } catch (error) {
+      // Clear any invalid state
+      setUser(null)
     } finally {
       setLoading(false)
     }
   }
 
   function login(userData, token) {
-    localStorage.setItem('token', token)
+    // ✅ FIXED: Token is now set in HttpOnly cookie by the login endpoint
+    // No need to store in localStorage
     setUser(userData)
   }
 
   async function logout() {
     try {
-      await axios.post('/api/auth/logout')
-    } catch {}
-    localStorage.removeItem('token')
-    setUser(null)
-    window.location.href = '/'
+      await axios.post('/api/auth/logout', {}, {
+        withCredentials: true // Include cookies
+      })
+    } catch (error) {
+      // Continue logout even if request fails
+      console.error('[Logout]', error.message)
+    } finally {
+      setUser(null)
+      // Server clears the cookie, client-side cleanup
+      window.location.href = '/'
+    }
   }
 
   return (
@@ -52,9 +59,4 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   return useContext(AuthContext)
-}
-
-export function getToken() {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('token')
 }

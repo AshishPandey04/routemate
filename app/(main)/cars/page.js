@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/shared/AuthContext.js'
-import api from '@/lib/api.js'
+import api, { getErrorMessage } from '@/lib/api.js'
 import { Plus, Car, Trash2, Snowflake } from 'lucide-react'
 
 export default function CarsPage() {
@@ -36,7 +36,7 @@ export default function CarsPage() {
       toast.success('Car removed')
       fetchCars()
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to remove car')
+      toast.error(getErrorMessage(err, 'Failed to remove car'))
     }
   }
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/shared/AuthContext.js'
-import api from '@/lib/api.js'
+import api, { getErrorMessage } from '@/lib/api.js'
 import { Car } from 'lucide-react'
 
 export default function AddCarPage() {
@@ -37,7 +37,7 @@ export default function AddCarPage() {
       toast.success('Car registered successfully!')
       router.push('/cars')
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to add car')
+      toast.error(getErrorMessage(err, 'Failed to add car'))
     } finally {
       setSubmitting(false)
     }

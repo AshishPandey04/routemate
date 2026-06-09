@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/shared/AuthContext.js'
-import api from '@/lib/api.js'
+import api, { getErrorMessage } from '@/lib/api.js'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Bell, MapPin, Calendar, Trash2, ArrowLeft, AlertCircle } from 'lucide-react'
@@ -60,7 +60,7 @@ export default function AlertDetailPage() {
       toast.success('Alert deleted successfully')
       router.push('/alerts')
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to delete alert')
+      toast.error(getErrorMessage(err, 'Failed to delete alert'))
     } finally {
       setDeleting(false)
     }

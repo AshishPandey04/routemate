@@ -70,3 +70,40 @@ export const ratingSchema = z.object({
   score:     z.number().min(1).max(5),
   comment:   z.string().optional(),
 })
+
+// Safety
+export const emergencyContactSchema = z.object({
+  emergencyContactName:  z.string().min(2).max(80),
+  emergencyContactPhone: z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian phone number'),
+})
+
+export const sosSchema = z.object({
+  tripId:  z.string().uuid(),
+  lat:     z.number().optional(),
+  lng:     z.number().optional(),
+  message: z.string().max(500).optional(),
+})
+
+// Disputes
+export const disputeSchema = z.object({
+  bookingId: z.string().uuid(),
+  reason:    z.string().min(10).max(2000),
+})
+
+export const disputeResolveSchema = z.object({
+  status:       z.enum(['UNDER_REVIEW', 'RESOLVED', 'REJECTED']),
+  resolution:   z.string().optional(),
+  refundAmount: z.number().min(0).optional(),
+  adminNote:    z.string().optional(),
+})
+
+// Payouts
+export const payoutRequestSchema = z.object({
+  amount: z.number().min(100),
+})
+
+export const adminPayoutSchema = z.object({
+  status:    z.enum(['APPROVED', 'PAID', 'REJECTED']),
+  bankRef:   z.string().optional(),
+  adminNote: z.string().optional(),
+})

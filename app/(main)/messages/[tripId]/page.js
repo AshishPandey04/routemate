@@ -1,93 +1,74 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/shared/AuthContext.js'
-import api from '@/lib/api.js'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import api, { getErrorMessage } from '@/lib/api.js'
 import { Send, MapPin, Users, ArrowLeft } from 'lucide-react'
 
 export default function MessagesPage() {
   const { user, loading } = useAuth()
-  const router = useRouter()
-  const params = useParams()
-  const tripId = params.tripId
+  const router            = useRouter()
+  const params            = useParams()
+  const tripId            = params.tripId
 
-  const [messages, setMessages] = useState([])
-  const [trip, setTrip] = useState(null)
-  const [participants, setParticipants] = useState([])
-  const [fetching, setFetching] = useState(true)
-  const [sending, setSending] = useState(false)
+  const [messages,   setMessages]   = useState([])
+  const [trip,       setTrip]       = useState(null)
+  const [fetching,   setFetching]   = useState(true)
+  const [sending,    setSending]    = useState(false)
   const [newMessage, setNewMessage] = useState('')
-  const messagesEndRef = useRef(null)
+  const messagesEndRef  = useRef(null)
   const pollIntervalRef = useRef(null)
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const res = await api.get(`/messages/${tripId}`)
+      setMessages(res.data.messages || [])
+    } catch {
+      console.error('Failed to load messages')
+    } finally {
+      setFetching(false)
+    }
+  }, [tripId])
+
+  const fetchTripDetails = useCallback(async () => {
+    try {
+      const res = await api.get(`/trips/${tripId}`)
+      setTrip(res.data.trip)
+    } catch {
+      toast.error('Failed to load trip details')
+    }
+  }, [tripId])
 
   useEffect(() => {
     if (!loading && !user) router.push('/login')
     if (user && tripId) {
       fetchTripDetails()
       fetchMessages()
-      // Poll for new messages every 10 seconds (was 2s - too aggressive)
       pollIntervalRef.current = setInterval(fetchMessages, 10000)
     }
-
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
     }
-  }, [user, loading, tripId])
+  }, [user, loading, tripId, fetchTripDetails, fetchMessages])
 
-  // Auto-scroll to bottom - use instant scroll to avoid performance hit
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'auto' })
     }
   }, [messages])
 
-  async function fetchTripDetails() {
-    try {
-      const res = await api.get(`/trips/${tripId}`)
-      setTrip(res.data.trip)
-
-      // Fetch trip bookings to get participants
-      const bookingsRes = await api.get(`/trips/${tripId}/bookings`)
-      const uniqueParticipants = [
-        res.data.trip.driver,
-        ...bookingsRes.data.bookings.map(b => b.user)
-      ].filter((u, i, arr) => i === arr.findIndex(a => a.id === u.id))
-      
-      setParticipants(uniqueParticipants)
-    } catch (err) {
-      toast.error('Failed to load trip details')
-    }
-  }
-
-  async function fetchMessages() {
-    try {
-      const res = await api.get(`/messages/${tripId}`)
-      setMessages(res.data.messages || [])
-    } catch (err) {
-      console.error('Failed to load messages')
-    } finally {
-      setFetching(false)
-    }
-  }
-
   async function handleSendMessage(e) {
     e.preventDefault()
     if (!newMessage.trim()) return
-
     setSending(true)
     try {
-      await api.post(`/messages/${tripId}`, {
-        content: newMessage
-      })
+      await api.post(`/messages/${tripId}`, { content: newMessage })
       setNewMessage('')
       await fetchMessages()
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to send message')
+      toast.error(getErrorMessage(err, 'Failed to send message'))
     } finally {
       setSending(false)
     }
@@ -95,140 +76,245 @@ export default function MessagesPage() {
 
   if (loading || fetching) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-500">Loading chat...</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <p style={{ color: 'var(--muted)' }}>Loading chat...</p>
       </div>
     )
   }
 
   if (!trip) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="p-8 text-center max-w-md">
-          <p className="text-gray-700 mb-4">Trip not found</p>
-          <Button onClick={() => router.push('/my-trips')}>
-            Go Back
-          </Button>
-        </Card>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
+          <p style={{ marginBottom: '16px' }}>Trip not found</p>
+          <button className="btn-primary" onClick={() => router.push('/my-trips')}>Go Back</button>
+        </div>
       </div>
     )
   }
 
+  const driverId = trip.driverId
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 md:px-6 py-4">
-          <div className="flex items-start justify-between mb-4">
-            <button
-              onClick={() => router.back()}
-              className="text-blue-600 hover:text-blue-700 flex items-center gap-1 font-semibold"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </button>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 68px)' }}>
 
-          <div>
-            <h1 className="text-2xl font-bold mb-2" style={{ color: '#0f172a' }}>Trip Chat</h1>
+      {/* ── Header ── */}
+      <div style={{
+        background:   'var(--bg-card)',
+        borderBottom: '1px solid var(--border)',
+        padding:      '16px 24px',
+        flexShrink:   0,
+      }}>
+        <button
+          onClick={() => router.back()}
+          style={{
+            display:    'flex',
+            alignItems: 'center',
+            gap:        '6px',
+            color:      '#3b82f6',
+            fontWeight: 600,
+            fontSize:   '14px',
+            background: 'none',
+            border:     'none',
+            cursor:     'pointer',
+            marginBottom: '12px',
+            padding:    0,
+          }}
+        >
+          <ArrowLeft size={16} /> Back
+        </button>
 
-            <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
-              <div className="flex items-center gap-2 text-gray-600">
-                <MapPin className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-medium">
-                  {trip.originCity} → {trip.destinationCity}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-gray-600">
-                <Users className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-medium">
-                  {participants.length} participant{participants.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-            </div>
-          </div>
+        <h1 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: '22px', marginBottom: '8px' }}>
+          Trip Chat
+        </h1>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--muted)' }}>
+            <MapPin size={14} color="#3b82f6" />
+            {trip.originCity} → {trip.destinationCity}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--muted)' }}>
+            <Users size={14} color="#3b82f6" />
+            {trip.driver?.name} (Driver)
+          </span>
+        </div>
+
+        {/* Color legend */}
+        <div style={{ display: 'flex', gap: '16px', marginTop: '10px', flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />
+            <span style={{ color: 'var(--muted)' }}>You</span>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+            <span style={{ color: 'var(--muted)' }}>Driver</span>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#64748b', display: 'inline-block' }} />
+            <span style={{ color: 'var(--muted)' }}>Rider</span>
+          </span>
         </div>
       </div>
 
-      {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-        <div className="max-w-4xl mx-auto w-full">
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-              <Send className="w-12 h-12 text-gray-300 mb-3" />
-              <p className="text-center">No messages yet. Start a conversation!</p>
-            </div>
-          ) : (
-            messages.map((message) => (
+      {/* ── Messages ── */}
+      <div style={{
+        flex:       1,
+        overflowY:  'auto',
+        padding:    '20px 24px',
+        display:    'flex',
+        flexDirection: 'column',
+        gap:        '12px',
+      }}>
+        {messages.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--muted)' }}>
+            <Send size={40} style={{ opacity: 0.2, marginBottom: '12px' }} />
+            <p>No messages yet. Start the conversation!</p>
+          </div>
+        ) : (
+          messages.map((msg) => {
+            const senderId = msg.senderId ?? msg.sender?.id
+            const isMe     = !!user?.id && senderId === user.id
+            const isDriver = !!trip?.driverId && senderId === trip.driverId
+
+            // bubble colours
+            const bg = isMe
+              ? 'linear-gradient(135deg,#3b82f6,#2563eb)'
+              : isDriver
+                ? 'linear-gradient(135deg,#f59e0b,#d97706)'
+                : '#334155'
+
+            const avatarBg = isMe
+              ? 'linear-gradient(135deg,#3b82f6,#2563eb)'
+              : isDriver
+                ? 'linear-gradient(135deg,#f59e0b,#d97706)'
+                : 'linear-gradient(135deg,#64748b,#475569)'
+
+            const label = isMe
+              ? 'You'
+              : isDriver
+                ? `${msg.sender?.name || 'Driver'} · Driver`
+                : msg.sender?.name || 'Rider'
+
+            const time = new Date(msg.createdAt).toLocaleTimeString('en-IN', {
+              hour: '2-digit', minute: '2-digit', hour12: true,
+            })
+
+            const initial = (msg.sender?.name || 'U')[0].toUpperCase()
+
+            return (
               <div
-                key={message.id}
-                className={`flex ${
-                  message.senderId === user.id ? 'justify-end' : 'justify-start'
-                } mb-4`}
+                key={msg.id}
+                style={{
+                  display:        'flex',
+                  justifyContent: isMe ? 'flex-end' : 'flex-start',
+                  alignItems:     'flex-end',
+                  gap:            '8px',
+                }}
               >
-                <div
-                  className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
-                    message.senderId === user.id
-                      ? 'bg-blue-600 text-white rounded-br-none'
-                      : 'bg-gray-200 text-gray-900 rounded-bl-none'
-                  }`}
-                >
-                  <p className="text-xs font-semibold mb-1 opacity-90">
-                    {message.sender?.name || 'User'}
-                  </p>
-                  <p className="wrap-break-word text-sm">{message.content}</p>
-                  <p
-                    className={`text-xs mt-2 ${
-                      message.senderId === user.id ? 'text-blue-100' : 'text-gray-600'
-                    }`}
-                  >
-                    {new Date(message.createdAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
+                {/* Left avatar (others) */}
+                {!isMe && (
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '50%',
+                    background: avatarBg, color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', fontWeight: 700, flexShrink: 0,
+                  }}>
+                    {initial}
+                  </div>
+                )}
+
+                {/* Bubble */}
+                <div style={{
+                  maxWidth:     '65%',
+                  background:   bg,
+                  color:        '#fff',
+                  padding:      '10px 14px',
+                  borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                  boxShadow:    '0 2px 8px rgba(0,0,0,0.15)',
+                }}>
+                  {/* Name */}
+                  <div style={{
+                    fontSize:      '11px',
+                    fontWeight:    700,
+                    marginBottom:  '4px',
+                    color:         'rgba(255,255,255,0.85)',
+                    letterSpacing: '0.3px',
+                  }}>
+                    {label}
+                  </div>
+
+                  {/* Content */}
+                  <div style={{
+                    fontSize:  '14px',
+                    lineHeight: '1.5',
+                    wordBreak: 'break-word',
+                  }}>
+                    {msg.content}
+                  </div>
+
+                  {/* Time */}
+                  <div style={{
+                    fontSize:   '11px',
+                    marginTop:  '6px',
+                    color:      'rgba(255,255,255,0.65)',
+                    textAlign:  'right',
+                  }}>
+                    {time}
+                  </div>
                 </div>
+
+                {/* Right avatar (me) */}
+                {isMe && (
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '50%',
+                    background: avatarBg, color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', fontWeight: 700, flexShrink: 0,
+                  }}>
+                    {(user?.name || 'U')[0].toUpperCase()}
+                  </div>
+                )}
               </div>
-            ))
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+            )
+          })
+        )}
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input */}
-      <div className="bg-white border-t border-gray-200 sticky bottom-0 p-4 md:p-6">
-        <div className="max-w-4xl mx-auto">
-          <form onSubmit={handleSendMessage} className="flex gap-3">
-            <Input
-              type="text"
-              placeholder="Type your message..."
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              disabled={sending}
-              style={{
-                borderRadius: '12px',
-                borderWidth: '2px',
-                padding: '12px 16px',
-                fontSize: '14px',
-              }}
-            />
-            <Button
-              type="submit"
-              disabled={sending || !newMessage.trim()}
-              className="gap-2"
-              style={{
-                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                color: '#fff',
-                borderRadius: '12px',
-                padding: '12px 20px',
-                fontWeight: 600,
-              }}
-            >
-              <Send className="w-4 h-4" />
-              <span className="hidden sm:inline">Send</span>
-            </Button>
-          </form>
-        </div>
+      {/* ── Input ── */}
+      <div style={{
+        background:   'var(--bg-card)',
+        borderTop:    '1px solid var(--border)',
+        padding:      '16px 24px',
+        flexShrink:   0,
+      }}>
+        <form
+          onSubmit={handleSendMessage}
+          style={{ display: 'flex', gap: '12px', alignItems: 'center' }}
+        >
+          <input
+            className="input"
+            type="text"
+            placeholder="Type a message..."
+            value={newMessage}
+            onChange={e => setNewMessage(e.target.value)}
+            disabled={sending}
+            style={{ flex: 1, borderRadius: '24px', padding: '12px 18px' }}
+          />
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={sending || !newMessage.trim()}
+            style={{
+              width: 'auto', padding: '12px 20px',
+              borderRadius: '24px',
+              display: 'flex', alignItems: 'center', gap: '8px',
+            }}
+          >
+            <Send size={16} />
+            {sending ? 'Sending...' : 'Send'}
+          </button>
+        </form>
       </div>
     </div>
   )

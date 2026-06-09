@@ -6,23 +6,34 @@ import { checkSeatAvailability } from '@/lib/algorithms/seat-allocator.js'
 import { validateSegment, calculateSegmentPrice } from '@/lib/algorithms/route-matcher.js'
 import { holdSchema } from '@/schemas/index.js'
 import { createOrder } from '@/lib/razorpay.js'
-
-
+import { apiSuccess, apiError } from '@/lib/api-response.js'
+import { CommonErrors, AppError, ErrorCode } from '@/lib/errors.js'
+import { applyRateLimit } from '@/lib/rate-limit.js'
 
 export async function POST(request) {
   try {
     const auth = await getAuthUser(request)
-    if (auth.error) return NextResponse.json(
-      { error: auth.error },
-      { status: auth.status }
-    )
+    if (auth.error) {
+      return apiError(auth.error)
+    }
+
+    // Rate limit: 5 hold attempts per user per minute (each creates a Razorpay order)
+    const rateCheck = await applyRateLimit(`hold:user:${auth.user.id}`, 5, 60)
+    if (!rateCheck.allowed) {
+      throw new AppError(
+        'Too many booking attempts. Please wait a moment.',
+        ErrorCode.TOO_MANY_REQUESTS,
+        429
+      )
+    }
 
     const body   = await request.json()
     const result = holdSchema.safeParse(body)
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error.issues?.[0]?.message || 'Validation failed' },
-        { status: 400 }
+      throw new AppError(
+        result.error.issues?.[0]?.message || 'Validation failed',
+        ErrorCode.VALIDATION_ERROR,
+        400
       )
     }
 
@@ -35,24 +46,23 @@ export async function POST(request) {
     })
 
     if (!trip) {
-      return NextResponse.json(
-        { error: 'Trip not found' },
-        { status: 404 }
-      )
+      throw CommonErrors.notFound('Trip')
     }
 
     if (trip.status !== 'SCHEDULED' && trip.status !== 'IN_TRANSIT') {
-      return NextResponse.json(
-        { error: 'This trip is not available for booking' },
-        { status: 400 }
+      throw new AppError(
+        'This trip is not available for booking',
+        ErrorCode.TRIP_NOT_FOUND,
+        400
       )
     }
 
     // Prevent driver from booking own trip
     if (trip.driverId === auth.user.id) {
-      return NextResponse.json(
-        { error: 'You cannot book your own trip' },
-        { status: 400 }
+      throw new AppError(
+        'You cannot book your own trip',
+        ErrorCode.FORBIDDEN,
+        403
       )
     }
 
@@ -66,19 +76,18 @@ export async function POST(request) {
     })
 
     if (existingBooking) {
-      return NextResponse.json(
-        { error: 'You already have a booking on this trip', existingBookingId: existingBooking.id },
-        { status: 400 }
+      throw new AppError(
+        'You already have a booking on this trip',
+        ErrorCode.BOOKING_CONFLICT,
+        400,
+        { existingBookingId: existingBooking.id }
       )
     }
 
     // Validate segment
     const segment = validateSegment(trip.routeCities, boardingCity, alightingCity)
     if (!segment.valid) {
-      return NextResponse.json(
-        { error: segment.error },
-        { status: 400 }
-      )
+      throw new AppError(segment.error, ErrorCode.VALIDATION_ERROR, 400)
     }
 
     const { boardingIndex, alightingIndex } = segment
@@ -92,9 +101,10 @@ export async function POST(request) {
         const eta    = new Date(boardingWaypoint.estimatedArrival)
         const buffer = new Date(Date.now() + 30 * 60 * 1000)
         if (eta < buffer) {
-          return NextResponse.json(
-            { error: 'Car has already passed your boarding city' },
-            { status: 400 }
+          throw new AppError(
+            'Car has already passed your boarding city',
+            ErrorCode.INVALID_BOOKING_STATUS,
+            400
           )
         }
       }
@@ -103,27 +113,65 @@ export async function POST(request) {
     // Check existing Redis hold for this user+trip
     const existingHold = await redis.get(`hold:${tripId}:${auth.user.id}`)
     if (existingHold) {
-      return NextResponse.json(
-        { error: 'You already have an active hold on this trip. Complete or wait for it to expire.' },
-        { status: 400 }
+      throw new AppError(
+        'You already have an active hold on this trip',
+        ErrorCode.BOOKING_CONFLICT,
+        400
       )
     }
 
-    // Check seat availability (first check — optimistic)
-    const availability = await checkSeatAvailability(
-      tripId,
-      boardingIndex,
-      alightingIndex,
-      seatsRequested
+    // Check seat availability under a serializable transaction to prevent race conditions
+    const availability = await prisma.$transaction(
+      async (tx) => {
+        // Re-read the trip inside the transaction to get a consistent snapshot
+        const lockedTrip = await tx.trip.findUnique({
+          where:  { id: tripId },
+          select: { totalSeats: true, status: true },
+        })
+
+        if (!lockedTrip) throw CommonErrors.notFound('Trip')
+
+        // Fetch overlapping seat segments inside the transaction
+        const overlapping = await tx.seatSegment.findMany({
+          where: {
+            tripId,
+            fromIndex: { lt: alightingIndex },
+            toIndex:   { gt: boardingIndex  },
+          },
+        })
+
+        // Sweep-line peak occupancy
+        let peak = 0
+        if (overlapping.length > 0) {
+          const events = []
+          for (const seg of overlapping) {
+            events.push({ index: seg.fromIndex, delta: +seg.seatsOccupied })
+            events.push({ index: seg.toIndex,   delta: -seg.seatsOccupied })
+          }
+          events.sort((a, b) => a.index !== b.index ? a.index - b.index : a.delta - b.delta)
+          let current = 0
+          for (const ev of events) {
+            current += ev.delta
+            peak = Math.max(peak, current)
+          }
+        }
+
+        const maxAvailable = lockedTrip.totalSeats - peak
+
+        return {
+          available:    maxAvailable >= seatsRequested,
+          maxAvailable: Math.max(0, maxAvailable),
+        }
+      },
+      { isolationLevel: 'Serializable' }
     )
 
     if (!availability.available) {
-      return NextResponse.json(
-        {
-          error:          'Not enough seats available',
-          availableSeats: availability.maxAvailable
-        },
-        { status: 409 }
+      throw new AppError(
+        'Not enough seats available',
+        ErrorCode.SEATS_UNAVAILABLE,
+        409,
+        { availableSeats: availability.maxAvailable }
       )
     }
 
@@ -138,14 +186,13 @@ export async function POST(request) {
     )
 
     // Create Razorpay order
-// Create Razorpay order
-const order = await createOrder(totalAmount, {
-  tripId,
-  userId:        auth.user.id,
-  boardingCity,
-  alightingCity,
-  seatsRequested,
-})
+    const order = await createOrder(totalAmount, {
+      tripId,
+      userId:        auth.user.id,
+      boardingCity,
+      alightingCity,
+      seatsRequested,
+    })
 
     // Store hold in Redis (8 min TTL)
     const holdData = {
@@ -160,16 +207,15 @@ const order = await createOrder(totalAmount, {
       razorpayOrderId: order.id,
     }
 
-   // In hold route — keep as is (stringify on store)
-await redis.set(
-  `hold:${tripId}:${auth.user.id}`,
-  JSON.stringify(holdData),
-  { ex: 480 }
-)
+    await redis.setex(
+      `hold:${tripId}:${auth.user.id}`,
+      480, // 8 minutes
+      JSON.stringify(holdData)
+    )
 
     const expiresAt = new Date(Date.now() + 8 * 60 * 1000)
 
-    return NextResponse.json({
+    return apiSuccess({
       holdKey:         `hold:${tripId}:${auth.user.id}`,
       razorpayOrderId: order.id,
       amount:          totalAmount,
@@ -183,10 +229,11 @@ await redis.set(
     })
 
   } catch (error) {
-    console.error('[BOOKING HOLD ERROR]', error)
-    return NextResponse.json(
-      { error: 'Something went wrong' },
-      { status: 500 }
-    )
+    console.error('[BOOKING HOLD ERROR]', {
+      message: error.message,
+      code:    error.code,
+      tripId:  error.details?.tripId
+    })
+    return apiError(error)
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma.js'
 import { getAuthUser } from '@/lib/get-auth-user.js'
+import { releaseTripEarnings } from '@/lib/wallet-service.js'
 
 export async function PATCH(request, { params }) {
   try {
@@ -43,6 +44,12 @@ export async function PATCH(request, { params }) {
         data:  { status: 'COMPLETED' }
       })
     })
+
+    try {
+      await releaseTripEarnings(tripId)
+    } catch (walletErr) {
+      console.error('[WALLET RELEASE]', walletErr.message)
+    }
 
     return NextResponse.json({
       message: 'Trip completed successfully'

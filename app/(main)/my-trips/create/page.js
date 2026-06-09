@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/shared/AuthContext.js'
-import api from '@/lib/api.js'
+import api, { getErrorMessage } from '@/lib/api.js'
 import { ArrowRight } from 'lucide-react'
 import CityAutocomplete from '@/components/shared/CityAutocomplete.js'
 
@@ -55,7 +55,7 @@ export default function CreateTripPage() {
       toast.success('Trip created successfully!')
       router.push(`/my-trips`)
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to create trip')
+      toast.error(getErrorMessage(err, 'Failed to create trip'))
     } finally {
       setSubmitting(false)
     }

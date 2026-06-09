@@ -19,9 +19,11 @@ model User {
   role         Role     @default(RIDER)
   isVerified   Boolean  @default(false)
   isActive     Boolean  @default(true)
-  fcmToken     String?  // ← add this line
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  fcmToken              String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   cars            Car[]
   tripsAsDriver   Trip[]        @relation("DriverTrips")
@@ -31,12 +33,16 @@ model User {
   ratingsReceived Rating[]      @relation("RatingsReceived")
   returnAlerts    ReturnAlert[]
   routeAlerts     RouteAlert[]
+  wallet          Wallet?
+  disputesFiled   Dispute[]     @relation("DisputeReporter")
+  sosAlerts       SosAlert[]
 }
 
 enum Role {
   RIDER
   DRIVER
   BOTH
+  ADMIN
 }
 
 // ─────────────────────────────────────
@@ -99,6 +105,8 @@ model Trip {
   gpsPings         GpsPing[]
   messages         Message[]
   returnSlot       ReturnSlot?
+  shareLink        TripShareLink?
+  sosAlerts        SosAlert[]
 
   @@index([status])
   @@index([originCity, destinationCity])
@@ -173,6 +181,7 @@ model Booking {
   payment        Payment?
   seatSegment    SeatSegment?
   rating         Rating?
+  disputes       Dispute[]
 
   @@index([userId])
   @@index([tripId])
@@ -330,4 +339,123 @@ model Rating {
 enum RatingType {
   RIDER_TO_DRIVER
   DRIVER_TO_RIDER
+}
+
+// ─────────────────────────────────────
+// WALLET & PAYOUTS
+// ─────────────────────────────────────
+model Wallet {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id])
+  balance        Float    @default(0)
+  pendingBalance Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  transactions WalletTransaction[]
+  payouts      Payout[]
+}
+
+model WalletTransaction {
+  id          String                @id @default(uuid())
+  walletId    String
+  wallet      Wallet                @relation(fields: [walletId], references: [id])
+  type        WalletTransactionType
+  amount      Float
+  description String?
+  bookingId   String?
+  tripId      String?
+  releasedAt  DateTime?
+  createdAt   DateTime              @default(now())
+
+  @@index([walletId, createdAt])
+  @@index([tripId, releasedAt])
+}
+
+enum WalletTransactionType {
+  EARNING_PENDING
+  EARNING
+  PAYOUT
+  REVERSAL
+  ADJUSTMENT
+}
+
+model Payout {
+  id          String       @id @default(uuid())
+  walletId    String
+  wallet      Wallet       @relation(fields: [walletId], references: [id])
+  amount      Float
+  status      PayoutStatus @default(PENDING)
+  bankRef     String?
+  adminNote   String?
+  requestedAt DateTime     @default(now())
+  processedAt DateTime?
+
+  @@index([status])
+  @@index([walletId])
+}
+
+enum PayoutStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+}
+
+// ─────────────────────────────────────
+// DISPUTES
+// ─────────────────────────────────────
+model Dispute {
+  id           String        @id @default(uuid())
+  bookingId    String
+  booking      Booking       @relation(fields: [bookingId], references: [id])
+  reporterId   String
+  reporter     User          @relation("DisputeReporter", fields: [reporterId], references: [id])
+  reason       String
+  status       DisputeStatus @default(OPEN)
+  resolution   String?
+  refundAmount Float?
+  adminNote    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status])
+  @@index([bookingId])
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+// ─────────────────────────────────────
+// SAFETY — SHARE LINK & SOS
+// ─────────────────────────────────────
+model TripShareLink {
+  id        String    @id @default(uuid())
+  tripId    String    @unique
+  trip      Trip      @relation(fields: [tripId], references: [id])
+  token     String    @unique
+  isActive  Boolean   @default(true)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+}
+
+model SosAlert {
+  id        String   @id @default(uuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  lat       Float?
+  lng       Float?
+  message   String?
+  createdAt DateTime @default(now())
+
+  @@index([tripId, createdAt])
 }

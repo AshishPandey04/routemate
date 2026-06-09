@@ -11,7 +11,7 @@ export async function POST(request) {
     const result = otpSchema.safeParse(body)
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0].message },
+        { error: result.error.issues?.[0]?.message || 'Validation failed' },
         { status: 400 }
       )
     }

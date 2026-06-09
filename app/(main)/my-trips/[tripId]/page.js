@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/shared/AuthContext.js'
-import api from '@/lib/api.js'
+import api, { getErrorMessage } from '@/lib/api.js'
 import { ArrowRight, Users, DollarSign } from 'lucide-react'
 
 export default function TripDetailDriverPage() {
@@ -43,7 +43,7 @@ export default function TripDetailDriverPage() {
       toast.success('Trip cancelled')
       router.push('/my-trips')
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to cancel')
+      toast.error(getErrorMessage(err, 'Failed to cancel'))
     } finally {
       setCancelling(false)
     }
@@ -59,7 +59,7 @@ export default function TripDetailDriverPage() {
       toast.success('Return trip confirmed! Watchers notified.')
       fetchTrip()
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to confirm return')
+      toast.error(getErrorMessage(err, 'Failed to confirm return'))
     }
   }
 

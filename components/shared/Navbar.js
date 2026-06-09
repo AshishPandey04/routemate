@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from './AuthContext.js'
-import { Menu, X, Car, MapPin, Bell, User } from 'lucide-react'
+import { Menu, X, Car, MapPin, Bell, User, Wallet, Shield, LayoutDashboard } from 'lucide-react'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
@@ -138,6 +138,43 @@ export default function Navbar() {
                   e.currentTarget.style.backgroundColor = 'transparent'
                 }}>
                   My Cars
+                </Link>
+              )}
+
+              {(user.role === 'DRIVER' || user.role === 'BOTH') && (
+                <Link href="/wallet" style={{
+                  color: '#475569',
+                  textDecoration: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                }}>
+                  Earnings
+                </Link>
+              )}
+
+              <Link href="/safety" style={{
+                color: '#475569',
+                textDecoration: 'none',
+                padding: '8px 16px',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: 500,
+              }}>
+                Safety
+              </Link>
+
+              {user.isAdmin && (
+                <Link href="/admin" style={{
+                  color: '#475569',
+                  textDecoration: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                }}>
+                  Admin
                 </Link>
               )}
 

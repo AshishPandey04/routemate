@@ -5,6 +5,9 @@ import { useRouter, useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/shared/AuthContext.js'
 import api from '@/lib/api.js'
+import TripMap from '@/components/maps/TripMap.jsx'
+import SafetyPanel from '@/components/shared/SafetyPanel.jsx'
+import { getSocket, disconnectSocket } from '@/lib/socket.js'
 import { Navigation, Send, MapPin, Zap, ZapOff } from 'lucide-react'
 
 export default function TrackingPage() {
@@ -24,6 +27,7 @@ export default function TrackingPage() {
     const intervalRef = useRef(null)
     const watchIdRef = useRef(null)
     const chatBottomRef = useRef(null)
+    const socketRef = useRef(null)
 
     // Prevent SSR issues
     useEffect(() => { setMounted(true) }, [])
@@ -35,11 +39,11 @@ export default function TrackingPage() {
             fetchLatestLocation()
             fetchMessages()
 
-            // Poll location every 10 seconds
+            // Fallback poll (socket handles live updates when server is running)
             intervalRef.current = setInterval(() => {
                 fetchLatestLocation()
                 fetchMessages()
-            }, 10000)
+            }, 30000)
         }
 
         return () => {
@@ -47,6 +51,53 @@ export default function TrackingPage() {
             stopSharingLocation()
         }
     }, [user, loading, tripId])
+
+    // Real-time location via Socket.io
+    useEffect(() => {
+        if (!user || !tripId) return
+
+        let cancelled = false
+
+        async function connectSocket() {
+            try {
+                const res = await api.get('/auth/socket-token')
+                const token = res.data.token
+                if (!token || cancelled) return
+
+                const socket = getSocket(token)
+                socketRef.current = socket
+
+                const onLocation = (loc) => {
+                    if (loc?.lat != null) setLocation(loc)
+                }
+
+                socket.off('location-update', onLocation)
+                socket.on('location-update', onLocation)
+                socket.emit('join-trip', { tripId })
+
+                if (!socket.connected) {
+                    socket.once('connect', () => {
+                        socket.emit('join-trip', { tripId })
+                    })
+                }
+            } catch {
+                // Socket optional; polling still works
+            }
+        }
+
+        connectSocket()
+
+        return () => {
+            cancelled = true
+            const socket = socketRef.current
+            if (socket) {
+                socket.emit('leave-trip', { tripId })
+                socket.off('location-update')
+            }
+            disconnectSocket()
+            socketRef.current = null
+        }
+    }, [user, tripId])
 
     // Determine if current user is the driver
     useEffect(() => {
@@ -194,14 +245,7 @@ export default function TrackingPage() {
             )}
           </div>
       
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 360px',
-              gap: '24px',
-              alignItems: 'start',
-            }}
-          >
+          <div className="track-layout">
             {/* LEFT PANEL */}
             <div
               style={{
@@ -210,130 +254,50 @@ export default function TrackingPage() {
                 gap: '16px',
               }}
             >
-              {/* LOCATION CARD */}
-              <div
-                className="card"
-                style={{
-                  minHeight: '280px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
+              {/* LIVE MAP */}
+              {trip && (
+                <TripMap
+                  trip={trip}
+                  liveLocation={location}
+                  height={440}
+                />
+              )}
+
+              {/* LIVE STATS */}
+              <div className="card" style={{ padding: '16px 20px' }}>
                 {location ? (
-                  <div style={{ width: '100%', textAlign: 'center' }}>
-                    {/* Pulsing Icon */}
+                  <div>
                     <div
                       style={{
-                        width: '80px',
-                        height: '80px',
-                        background: sharing
-                          ? 'rgba(34,197,94,0.15)'
-                          : 'rgba(245,159,11,0.15)',
-                        borderRadius: '50%',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        margin: '0 auto 20px',
-                        animation: 'pulse 2s infinite',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                        marginBottom: '12px',
                       }}
                     >
-                      <Navigation
-                        size={36}
-                        color={sharing ? 'var(--green)' : 'var(--amber)'}
-                        style={{
-                          transform:
-                            location.heading != null
-                              ? `rotate(${location.heading}deg)`
-                              : 'none',
-                          transition: 'transform 0.5s ease',
-                        }}
-                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div
+                          style={{
+                            width: '10px',
+                            height: '10px',
+                            borderRadius: '50%',
+                            background: sharing ? 'var(--green)' : 'var(--amber)',
+                            animation: 'pulse 2s infinite',
+                          }}
+                        />
+                        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: '15px' }}>
+                          {sharing ? 'Sharing live' : 'Live position'}
+                        </span>
+                      </div>
+                      {location.speed != null && (
+                        <span style={{ fontSize: '14px', color: 'var(--muted)' }}>
+                          {Math.round(location.speed)} km/h
+                        </span>
+                      )}
                     </div>
-      
-                    {/* Location Data */}
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(3, 1fr)',
-                        gap: '16px',
-                        marginBottom: '20px',
-                        padding: '16px',
-                        background: 'var(--bg-input)',
-                        borderRadius: '10px',
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            fontSize: '11px',
-                            color: 'var(--muted)',
-                            marginBottom: '4px',
-                          }}
-                        >
-                          LAT
-                        </div>
-      
-                        <div
-                          style={{
-                            fontFamily: 'Syne',
-                            fontWeight: 700,
-                            fontSize: '14px',
-                          }}
-                        >
-                          {location.lat?.toFixed(5)}
-                        </div>
-                      </div>
-      
-                      <div>
-                        <div
-                          style={{
-                            fontSize: '11px',
-                            color: 'var(--muted)',
-                            marginBottom: '4px',
-                          }}
-                        >
-                          LNG
-                        </div>
-      
-                        <div
-                          style={{
-                            fontFamily: 'Syne',
-                            fontWeight: 700,
-                            fontSize: '14px',
-                          }}
-                        >
-                          {location.lng?.toFixed(5)}
-                        </div>
-                      </div>
-      
-                      <div>
-                        <div
-                          style={{
-                            fontSize: '11px',
-                            color: 'var(--muted)',
-                            marginBottom: '4px',
-                          }}
-                        >
-                          SPEED
-                        </div>
-      
-                        <div
-                          style={{
-                            fontFamily: 'Syne',
-                            fontWeight: 700,
-                            fontSize: '14px',
-                          }}
-                        >
-                          {location.speed != null
-                            ? `${Math.round(location.speed)} km/h`
-                            : '—'}
-                        </div>
-                      </div>
-                    </div>
-      
-                    {/* Next Waypoint */}
+
                     {location.nextWaypoint && (
                       <div
                         style={{
@@ -343,88 +307,64 @@ export default function TrackingPage() {
                           background: 'rgba(245,159,11,0.1)',
                           border: '1px solid rgba(245,159,11,0.2)',
                           borderRadius: '8px',
-                          padding: '8px 16px',
-                          marginBottom: '16px',
+                          padding: '8px 12px',
+                          marginBottom: '12px',
                           fontSize: '13px',
                         }}
                       >
                         <MapPin size={14} color="var(--amber)" />
-      
                         <span>
-                          Next:{' '}
-                          <strong>
-                            {location.nextWaypoint.cityName}
-                          </strong>
+                          Next: <strong>{location.nextWaypoint.cityName}</strong>
                         </span>
                       </div>
                     )}
-      
-                    {/* Last Updated */}
+
                     <div
                       style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px',
                         fontSize: '12px',
                         color: 'var(--muted)',
-                        marginBottom: '16px',
                       }}
                     >
-                      Updated{' '}
-                      {new Date(location.timestamp).toLocaleTimeString(
-                        'en-IN'
-                      )}
+                      <span>
+                        Updated{' '}
+                        {location.timestamp
+                          ? new Date(location.timestamp).toLocaleTimeString('en-IN')
+                          : '—'}
+                      </span>
+                      <a
+                        href={`https://www.google.com/maps?q=${location.lat},${location.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'var(--amber)', textDecoration: 'none', fontWeight: 600 }}
+                      >
+                        Open in Google Maps →
+                      </a>
                     </div>
-      
-                    {/* Google Maps Link */}
-                    <a
-                      href={`https://www.google.com/maps?q=${location.lat},${location.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-secondary"
-                      style={{
-                        display: 'inline-block',
-                        padding: '8px 20px',
-                        fontSize: '13px',
-                        textDecoration: 'none',
-                      }}
-                    >
-                      Open in Google Maps
-                    </a>
                   </div>
                 ) : (
-                  <div
-                    style={{
-                      textAlign: 'center',
-                      color: 'var(--muted)',
-                    }}
-                  >
-                    <Navigation
-                      size={48}
-                      style={{
-                        marginBottom: '16px',
-                        opacity: 0.3,
-                      }}
-                    />
-      
-                    <p
-                      style={{
-                        fontFamily: 'Syne',
-                        fontWeight: 600,
-                        marginBottom: '8px',
-                      }}
-                    >
+                  <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '8px 0' }}>
+                    <Navigation size={32} style={{ marginBottom: '12px', opacity: 0.35 }} />
+                    <p style={{ fontFamily: 'Syne', fontWeight: 600, marginBottom: '6px' }}>
                       {isDriver
                         ? 'Start sharing your location'
-                        : 'Waiting for driver location...'}
+                        : 'Waiting for driver location…'}
                     </p>
-      
                     <p style={{ fontSize: '13px' }}>
                       {isDriver
-                        ? 'Tap the button below to begin'
-                        : "You'll see the car here once the driver starts sharing"}
+                        ? 'The map shows your route; riders see you once sharing starts.'
+                        : 'The driver marker appears when they start sharing GPS.'}
                     </p>
                   </div>
                 )}
               </div>
       
+              <SafetyPanel tripId={tripId} tripStatus={trip?.status} />
+
               {/* DRIVER CONTROLS */}
               {isDriver && (
                 <div className="card">
@@ -554,17 +494,24 @@ export default function TrackingPage() {
                 top: '88px',
               }}
             >
-              <h3
-                style={{
-                  fontFamily: 'Syne',
-                  fontWeight: 700,
-                  marginBottom: '16px',
-                  paddingBottom: '16px',
-                  borderBottom: '1px solid var(--border)',
-                }}
-              >
-                Trip Chat
-              </h3>
+              <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
+                <h3 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: '16px', marginBottom: '10px' }}>
+                  Trip Chat
+                </h3>
+                {/* Legend */}
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  {[
+                    { color: '#3b82f6', label: 'You'    },
+                    { color: '#f59e0b', label: 'Driver' },
+                    { color: '#64748b', label: 'Riders' },
+                  ].map(l => (
+                    <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--muted)' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: l.color, display: 'inline-block' }} />
+                      {l.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
       
               {/* Messages */}
               <div
@@ -575,39 +522,118 @@ export default function TrackingPage() {
                   flexDirection: 'column',
                   gap: '10px',
                   marginBottom: '16px',
+                  paddingRight: '4px',
                 }}
               >
+                {messages.length === 0 && (
+                  <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '13px', marginTop: '32px' }}>
+                    No messages yet. Say hello! 👋
+                  </div>
+                )}
+
                 {messages.map((msg) => {
-                  const isMe = msg.sender?.id === user?.id
-      
+                  const senderId   = msg.senderId ?? msg.sender?.id
+                  const isMe       = !!user?.id && senderId === user.id
+                  const isDriver   = !!trip?.driverId && senderId === trip.driverId
+                  const senderName = msg.sender?.name || 'Rider'
+                  const initial    = senderName[0].toUpperCase()
+
+                  // Colours:
+                  // Me      → blue  (right)
+                  // Driver  → amber (left)
+                  // Riders  → slate (left)
+                  const bubbleBg = isMe
+                    ? 'linear-gradient(135deg,#3b82f6,#2563eb)'
+                    : isDriver
+                      ? 'linear-gradient(135deg,#f59e0b,#d97706)'
+                      : '#334155'
+
+                  const avatarBg = isMe
+                    ? 'linear-gradient(135deg,#3b82f6,#2563eb)'
+                    : isDriver
+                      ? 'linear-gradient(135deg,#f59e0b,#d97706)'
+                      : 'linear-gradient(135deg,#64748b,#475569)'
+
+                  const label = isMe
+                    ? 'You'
+                    : isDriver
+                      ? `${senderName} · Driver`
+                      : senderName
+
+                  const time = new Date(msg.createdAt).toLocaleTimeString('en-IN', {
+                    hour: '2-digit', minute: '2-digit', hour12: true,
+                  })
+
                   return (
                     <div
                       key={msg.id}
                       style={{
-                        alignSelf: isMe
-                          ? 'flex-end'
-                          : 'flex-start',
-                        maxWidth: '85%',
+                        display:        'flex',
+                        justifyContent: isMe ? 'flex-end' : 'flex-start',
+                        alignItems:     'flex-end',
+                        gap:            '6px',
                       }}
                     >
-                      <div
-                        style={{
-                          background: isMe
-                            ? 'var(--amber)'
-                            : 'var(--bg-input)',
-                          color: isMe ? '#000' : 'var(--text)',
-                          padding: '9px 13px',
-                          borderRadius: isMe
-                            ? '12px 12px 4px 12px'
-                            : '12px 12px 12px 4px',
-                        }}
-                      >
-                        {msg.content}
+                      {/* Avatar — left side for others */}
+                      {!isMe && (
+                        <div style={{
+                          width: '28px', height: '28px', borderRadius: '50%',
+                          background: avatarBg, color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '11px', fontWeight: 700, flexShrink: 0,
+                        }}>
+                          {initial}
+                        </div>
+                      )}
+
+                      {/* Bubble */}
+                      <div style={{ maxWidth: '80%' }}>
+                        <div style={{
+                          background:   bubbleBg,
+                          color:        '#fff',
+                          padding:      '8px 12px',
+                          borderRadius: isMe ? '14px 14px 3px 14px' : '14px 14px 14px 3px',
+                          boxShadow:    '0 2px 6px rgba(0,0,0,0.15)',
+                        }}>
+                          {/* Sender label */}
+                          <div style={{
+                            fontSize: '10px', fontWeight: 700,
+                            color: 'rgba(255,255,255,0.8)',
+                            marginBottom: '3px', letterSpacing: '0.3px',
+                          }}>
+                            {label}
+                          </div>
+
+                          {/* Message text */}
+                          <div style={{ fontSize: '13px', lineHeight: '1.45', wordBreak: 'break-word' }}>
+                            {msg.content}
+                          </div>
+
+                          {/* Time */}
+                          <div style={{
+                            fontSize: '10px', marginTop: '4px',
+                            color: 'rgba(255,255,255,0.6)', textAlign: 'right',
+                          }}>
+                            {time}
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Avatar — right side for me */}
+                      {isMe && (
+                        <div style={{
+                          width: '28px', height: '28px', borderRadius: '50%',
+                          background: avatarBg, color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '11px', fontWeight: 700, flexShrink: 0,
+                        }}>
+                          {(user?.name || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
-      
+
                 <div ref={chatBottomRef} />
               </div>
       
@@ -658,11 +684,21 @@ export default function TrackingPage() {
             </div>
           </div>
       
-          {/* Pulse animation */}
           <style>{`
             @keyframes pulse {
               0%, 100% { opacity: 1; }
               50% { opacity: 0.5; }
+            }
+            .track-layout {
+              display: grid;
+              grid-template-columns: 1fr 360px;
+              gap: 24px;
+              align-items: start;
+            }
+            @media (max-width: 900px) {
+              .track-layout {
+                grid-template-columns: 1fr;
+              }
             }
           `}</style>
         </div>

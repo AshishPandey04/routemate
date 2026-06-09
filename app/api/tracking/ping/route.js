@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma.js'
 import redis from '@/lib/redis.js'
 import { getAuthUser } from '@/lib/get-auth-user.js'
 import { pingSchema } from '@/schemas/index.js'
+import { broadcastLocationUpdate } from '@/lib/socket-broadcast.js'
+import { sendPushNotification } from '@/lib/fcm.js'
 
 export async function POST(request) {
   try {
@@ -88,6 +90,17 @@ export async function POST(request) {
       `trip:${tripId}:location`,
       JSON.stringify(locationData)
     )
+
+    const nextWaypoint = updatedETAs.find((w) => !w.actualArrival)
+    await broadcastLocationUpdate(tripId, {
+      ...locationData,
+      nextWaypoint: nextWaypoint
+        ? {
+            cityName: nextWaypoint.cityName,
+            estimatedArrival: nextWaypoint.estimatedArrival,
+          }
+        : null,
+    })
 
     // Check route alerts — notify en-route users
     await checkAndFireRouteAlerts(trip, updatedETAs)
@@ -194,11 +207,16 @@ async function checkAndFireRouteAlerts(trip, updatedETAs) {
               data:  { notified: true }
             })
 
-            // TODO Phase 9: send FCM push notification here
-            console.log(
-              `[ALERT] Car approaching ${waypoint.cityName} in ${Math.round(etaMinutes)} min`,
-              `→ Notify user ${alert.userId}`
-            )
+            // Send FCM push notification if user has a token
+            if (alert.user.fcmToken) {
+              const etaMinutes = Math.round(etaMs / 60000)
+              await sendPushNotification(
+                alert.user.fcmToken,
+                '🚗 Car Approaching Your City!',
+                `A car heading to ${alert.toCity} is ${etaMinutes} min from ${waypoint.cityName}. Book now!`,
+                { type: 'CAR_APPROACHING', tripId: trip.id, city: waypoint.cityName }
+              )
+            }
           }
         }
       }
