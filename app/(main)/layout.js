@@ -5,10 +5,11 @@ export default function MainLayout({ children }) {
     <>
       <Navbar />
       <main style={{
-        maxWidth: '1200px',
+        maxWidth: '1400px',
         margin:   '0 auto',
-        padding:  '32px 24px',
+        padding:  '40px 24px',
         flex:     1,
+        minHeight: 'calc(100vh - 68px)',
       }}>
         {children}
       </main>
