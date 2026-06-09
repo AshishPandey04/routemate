@@ -35,6 +35,9 @@ yarn-error.log*
 .env.local
 .env
 
+# local Claude guidance (not to be committed)
+claude.local.md
+
 
 
 # vercel
